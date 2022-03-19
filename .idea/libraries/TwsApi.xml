@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="TwsApi">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/TwsApi.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/TwsApi_debug.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

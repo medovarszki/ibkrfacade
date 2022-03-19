@@ -1,0 +1,20 @@
+<component name="libraryTable">
+  <library name="redis.clients.jedis" type="repository">
+    <properties maven-id="redis.clients:jedis:4.1.1" />
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/jedis-4.1.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/slf4j-api-1.7.32.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/commons-pool2-2.11.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/json-20211205.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/gson-2.8.9.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$PROJECT_DIR$/lib/jedis-4.1.1-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/slf4j-api-1.7.32-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/commons-pool2-2.11.1-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/json-20211205-javadoc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/gson-2.8.9-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES />
+  </library>
+</component>
