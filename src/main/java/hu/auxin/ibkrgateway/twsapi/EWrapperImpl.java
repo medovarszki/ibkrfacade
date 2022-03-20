@@ -1,8 +1,8 @@
-package hu.mmihaly.ibkrgateway;
+package hu.auxin.ibkrgateway.twsapi;
 
 import com.ib.client.*;
-import hu.mmihaly.ibkrgateway.handler.DBHandler;
-import hu.mmihaly.ibkrgateway.handler.DataHandler;
+import hu.auxin.ibkrgateway.twsapi.handler.DBHandler;
+import hu.auxin.ibkrgateway.twsapi.handler.DataHandler;
 
 import java.sql.Timestamp;
 import java.text.DecimalFormat;

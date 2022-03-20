@@ -1,4 +1,4 @@
-package hu.mmihaly.ibkrgateway.handler;
+package hu.auxin.ibkrgateway.twsapi.handler;
 
 import java.sql.*;
 

@@ -1,4 +1,4 @@
-package hu.mmihaly.ibkrgateway;
+package hu.auxin.ibkrgateway.twsapi;
 
 public class Tick {
     public double bid;

@@ -1,4 +1,4 @@
-package hu.mmihaly.ibkrgateway.handler;
+package hu.auxin.ibkrgateway.twsapi.handler;
 
 import com.ib.client.Contract;
 import com.ib.client.EClientSocket;

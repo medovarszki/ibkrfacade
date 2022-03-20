@@ -1,7 +1,11 @@
-package hu.mmihaly.ibkrgateway;
+package hu.auxin.ibkrgateway;
 
 import com.ib.client.*;
-import hu.mmihaly.ibkrgateway.handler.DataHandler;
+import hu.auxin.ibkrgateway.twsapi.AvailableAlgoParams;
+import hu.auxin.ibkrgateway.twsapi.ContractSamples;
+import hu.auxin.ibkrgateway.twsapi.EWrapperImpl;
+import hu.auxin.ibkrgateway.twsapi.OrderSamples;
+import hu.auxin.ibkrgateway.twsapi.handler.DataHandler;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
