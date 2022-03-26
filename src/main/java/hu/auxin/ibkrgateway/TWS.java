@@ -5,28 +5,57 @@ import hu.auxin.ibkrgateway.twsapi.AvailableAlgoParams;
 import hu.auxin.ibkrgateway.twsapi.ContractSamples;
 import hu.auxin.ibkrgateway.twsapi.EWrapperImpl;
 import hu.auxin.ibkrgateway.twsapi.OrderSamples;
-import hu.auxin.ibkrgateway.twsapi.handler.DataHandler;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Scope;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Component;
 
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.List;
 
-public class Main {
+@Component
+@Scope("singleton")
+public class TWS {
 
-    public static final String ACCOUNT_NUMBER = "U7660902"; //"DU3718613"
+    private static final Logger LOG = LogManager.getLogger(TWS.class);
 
-    public static void main(String[] args) throws InterruptedException {
-        EWrapperImpl wrapper = new EWrapperImpl();
+    @Value("${ibkr.tws.host}")
+    private String TWS_HOST;
 
-        final EClientSocket client = wrapper.getClient();
+    @Value("${ibkr.tws.port}")
+    private int TWS_PORT;
+
+    @Autowired
+    private RedisTemplate<Integer, Contract> contractRedisTemplate;
+
+    private EClientSocket client;
+    private EWrapperImpl wrapper = null;
+
+    private static int autoIncrement = 0;
+
+    private TWS() {}
+
+    public void subscribeToContract(Contract contract) {
+        final int currentId = ++autoIncrement;
+        client.reqMktData(currentId, contract, "", false, false, null);
+        contractRedisTemplate.opsForValue().set(currentId, contract);
+    }
+
+    public void connect() {
+        wrapper = new EWrapperImpl();
+
+        client = wrapper.getClient();
         final EReaderSignal signal = wrapper.getSignal();
         //! [connect]
-        client.eConnect("127.0.0.1", 7496, 2);
+        client.eConnect(TWS_HOST, TWS_PORT, 2);
         final EReader reader = new EReader(client, signal);
-
-        final DataHandler dataHandler = new DataHandler(client);
-        wrapper.setDataHandler(dataHandler);
-
         reader.start();
+
         //An additional thread is created in this program design to empty the messaging queue
         new Thread(() -> {
             while (client.isConnected()) {
@@ -38,34 +67,10 @@ public class Main {
                 }
             }
         }).start();
+
         //! [ereader]
         // A pause to give the application time to establish the connection
         // In a production application, it would be best to wait for callbacks to confirm the connection is complete
-
-        Contract stk = new Contract();
-        stk.symbol("TSLA");
-        stk.secType(Types.SecType.STK);
-        stk.currency("USD");
-        stk.exchange("SMART");
-        dataHandler.subscribe(stk);
-
-        //asking for option chain
-        client.reqSecDefOptParams(100000, "TSLA", "", "STK", 76792991);
-
-//        Contract contract = new Contract();
-//        contract.symbol("TSLA");
-//        contract.secType(Types.SecType.OPT);
-//        contract.currency("USD");
-//        contract.exchange("SMART");
-//        contract.lastTradeDateOrContractMonth("20211126");
-//        contract.strike(1200);
-//        contract.right("C");
-//        contract.multiplier("100");
-
-//        client.reqContractDetails(1, stk);
-        //client.reqMktData(10, contract, "", false, false, null);
-
-        //client.reqPnL(17001, ACCOUNT_NUMBER, "");
 
         //client.reqAccountUpdates(true, ACCOUNT_NUMBER);
         //client.reqPositions();
@@ -97,7 +102,6 @@ public class Main {
         //whatIfSamples(wrapper.getClient(), wrapper.getCurrentOrderId());
         //historicalTicks(wrapper.getClient());
 
-        //Thread.sleep(10000);
         //client.eDisconnect();
     }
 

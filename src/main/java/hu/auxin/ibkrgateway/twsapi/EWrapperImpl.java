@@ -1,13 +1,8 @@
 package hu.auxin.ibkrgateway.twsapi;
 
 import com.ib.client.*;
-import hu.auxin.ibkrgateway.twsapi.handler.DBHandler;
-import hu.auxin.ibkrgateway.twsapi.handler.DataHandler;
 
-import java.sql.Timestamp;
 import java.text.DecimalFormat;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -15,10 +10,6 @@ import java.util.Set;
 
 //! [ewrapperimpl]
 public class EWrapperImpl implements EWrapper {
-
-    private DBHandler dbHandler = DBHandler.getInstance();
-
-    private DataHandler dataHandler;
 
     //! [socket_declare]
     private EReaderSignal readerSignal;
@@ -30,10 +21,6 @@ public class EWrapperImpl implements EWrapper {
     public EWrapperImpl() {
         readerSignal = new EJavaSignal();
         clientSocket = new EClientSocket(this, readerSignal);
-    }
-
-    public void setDataHandler(DataHandler dataHandler) {
-        this.dataHandler = dataHandler;
     }
 
     //! [socket_init]
@@ -65,10 +52,10 @@ public class EWrapperImpl implements EWrapper {
             case BID_OPTION:
             case LAST_OPTION:
             case OPTION_IMPLIED_VOL:
-                Contract contract = dataHandler.subscriptions.get(tickerId);
-                if(contract != null) {
-                    dbHandler.insertOptionFieldData(tickerId, Timestamp.valueOf(LocalDateTime.now()), tickType.name(), String.valueOf(size));
-                }
+//                Contract contract = dataHandler.subscriptions.get(tickerId);
+//                if(contract != null) {
+//                    dbHandler.insertOptionFieldData(tickerId, Timestamp.valueOf(LocalDateTime.now()), tickType.name(), String.valueOf(size));
+//                }
         }
         //System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + field + ", Size: " + size);
     }
@@ -82,16 +69,6 @@ public class EWrapperImpl implements EWrapper {
                                       double undPrice) {
         System.out.println("TickOptionComputation. TickerId: " + tickerId + ", field: " + field + ", ImpliedVolatility: " + impliedVol + ", Delta: " + delta
                 + ", OptionPrice: " + optPrice + ", pvDividend: " + pvDividend + ", Gamma: " + gamma + ", Vega: " + vega + ", Theta: " + theta + ", UnderlyingPrice: " + undPrice);
-
-        TickType tickType = TickType.get(field);
-        switch (tickType) {
-            case ASK_OPTION:
-            case BID_OPTION:
-                Contract contract = dataHandler.subscriptions.get(tickerId);
-                if(contract != null) {
-                    dbHandler.insertOptionGreeksData(tickerId, Timestamp.valueOf(LocalDateTime.now()), tickType.name(), impliedVol, delta, gamma, vega, theta, optPrice);
-                }
-        }
     }
     //! [tickoptioncomputation]
 
@@ -105,15 +82,15 @@ public class EWrapperImpl implements EWrapper {
     //! [tickstring]
     @Override
     public void tickString(int tickerId, int tickType, String value) {
-        if(DataHandler.subscriptions.keySet().contains(tickerId)) {
-            if(TickType.RT_VOLUME == TickType.get(tickType)) {
-                Contract contract = DataHandler.subscriptions.get(tickerId);
-                String[] values = value.split(";"); // example: 701.28;1;1348075471534;67854;701.46918464;true
-                if(values.length > 3 && !values[0].equals("")) {
-                    dbHandler.insertStockData(new Timestamp(Long.parseLong(values[2])), contract.symbol(), Double.parseDouble(values[0]), Integer.parseInt(values[1]));
-                }
-            }
-        }
+//        if(DataHandler.subscriptions.keySet().contains(tickerId)) {
+//            if(TickType.RT_VOLUME == TickType.get(tickType)) {
+//                Contract contract = DataHandler.subscriptions.get(tickerId);
+//                String[] values = value.split(";"); // example: 701.28;1;1348075471534;67854;701.46918464;true
+//                if(values.length > 3 && !values[0].equals("")) {
+//                    dbHandler.insertStockData(new Timestamp(Long.parseLong(values[2])), contract.symbol(), Double.parseDouble(values[0]), Integer.parseInt(values[1]));
+//                }
+//            }
+//        }
         //System.out.println("Tick string. Ticker Id:" + tickerId + ", Type: " + tickType + ", Value: " + value);
     }
 
@@ -473,62 +450,6 @@ public class EWrapperImpl implements EWrapper {
     //! [securityDefinitionOptionParameter]
     @Override
     public void securityDefinitionOptionalParameter(int reqId, String exchange, int underlyingConId, String tradingClass, String multiplier, Set<String> expirations, Set<Double> strikes) {
-        if("SMART".equals(exchange)) {
-
-//            Optional<Contract> underlying = dataHandler.subscriptions.entrySet().stream()
-//                    .filter(entry -> entry.getValue().secType().equals(Types.SecType.STK) && entry.getValue().symbol().equals(tradingClass))
-//                    .map(Entry::getValue)
-//                    .findAny();
-
-            double price = 850d;
-
-            //price from iex
-//            try {
-//                URL url = new URL("https://cloud.iexapis.com/v1/stock/TSLA/price?token=pk_972f58484658455c859b31eff4b3592f");
-//                URLConnection con = url.openConnection();
-//                InputStream in = con.getInputStream();
-//                String text = new BufferedReader(new InputStreamReader(in)).lines().collect(Collectors.joining());
-//                price = Double.parseDouble(text);
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
-
-            final int explimit = 3;
-            final int strikelimit = 10;
-
-            int e = 0;
-            for(String expiration : expirations) {
-                if(e++ < explimit) {
-                    int s = 0;
-                    List<Double> strikeList = new ArrayList(strikes);
-                    for(double strike : strikeList) {
-                        if(price <= strike) {
-                            strikeList = strikeList.subList(Math.max(0, s - strikelimit), Math.min(strikeList.size(), s + strikelimit));
-                            break;
-                        }
-                        s++;
-                    }
-                    for (Double strike : strikeList) {
-                        Contract contract = new Contract();
-                        contract.symbol(tradingClass);
-                        contract.secType(Types.SecType.OPT);
-                        contract.currency("USD");
-                        contract.exchange("SMART");
-                        contract.lastTradeDateOrContractMonth(expiration);
-                        contract.strike(strike);
-                        contract.multiplier(multiplier);
-                        contract.right("C");
-                        dataHandler.subscribe(contract);
-
-                        Contract putContract = contract.clone();
-                        putContract.right("P");
-                        dataHandler.subscribe(putContract);
-                    }
-                }
-            }
-//            System.out.println(expirations);
-//            System.out.println(strikes);
-        }
     }
     //! [securityDefinitionOptionParameter]
 
