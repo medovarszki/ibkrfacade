@@ -17,6 +17,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 @Scope("singleton")
@@ -31,19 +32,23 @@ public class TWS {
     private int TWS_PORT;
 
     @Autowired
-    private RedisTemplate<Integer, Contract> contractRedisTemplate;
+    private RedisTemplate redisTemplate;
 
     private EClientSocket client;
-    private EWrapperImpl wrapper = null;
+    private EWrapperImpl wrapper;
 
-    private static int autoIncrement = 0;
+    private static AtomicInteger autoIncrement = new AtomicInteger();
 
     private TWS() {}
 
+    public void searchContract(String search) {
+        client.reqMatchingSymbols(autoIncrement.get(), search);
+    }
+
     public void subscribeToContract(Contract contract) {
-        final int currentId = ++autoIncrement;
-        client.reqMktData(currentId, contract, "", false, false, null);
-        contractRedisTemplate.opsForValue().set(currentId, contract);
+//        final int currentId = ++autoIncrement;
+//        client.reqMktData(currentId, contract, "", false, false, null);
+//        redisTemplate.opsForHash().putIfAbsent(currentId, contract, null);
     }
 
     public void connect() {
@@ -63,7 +68,7 @@ public class TWS {
                 try {
                     reader.processMsgs();
                 } catch (Exception e) {
-                    System.out.println("Exception: " + e.getMessage());
+                    LOG.error(e);
                 }
             }
         }).start();

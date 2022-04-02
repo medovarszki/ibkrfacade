@@ -16,6 +16,7 @@ public class WebHandler {
 
     @PostMapping("/search")
     public List<Contract> searchContract(String query) {
+        tws.searchContract(query);
         //TODO find possible contracts by string
         return null;
     }

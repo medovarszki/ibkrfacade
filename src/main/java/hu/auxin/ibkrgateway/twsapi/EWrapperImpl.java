@@ -82,16 +82,8 @@ public class EWrapperImpl implements EWrapper {
     //! [tickstring]
     @Override
     public void tickString(int tickerId, int tickType, String value) {
-//        if(DataHandler.subscriptions.keySet().contains(tickerId)) {
-//            if(TickType.RT_VOLUME == TickType.get(tickType)) {
-//                Contract contract = DataHandler.subscriptions.get(tickerId);
-//                String[] values = value.split(";"); // example: 701.28;1;1348075471534;67854;701.46918464;true
-//                if(values.length > 3 && !values[0].equals("")) {
-//                    dbHandler.insertStockData(new Timestamp(Long.parseLong(values[2])), contract.symbol(), Double.parseDouble(values[0]), Integer.parseInt(values[1]));
-//                }
-//            }
-//        }
-        //System.out.println("Tick string. Ticker Id:" + tickerId + ", Type: " + tickType + ", Value: " + value);
+        TickType type = TickType.get(tickType);
+        System.out.println("Tick string. Ticker Id:" + tickerId + ", Type: " + type.name() + ", Value: " + value);
     }
 
     //! [tickstring]

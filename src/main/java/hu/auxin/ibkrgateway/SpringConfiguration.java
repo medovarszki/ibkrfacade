@@ -1,6 +1,5 @@
 package hu.auxin.ibkrgateway;
 
-import com.ib.client.Contract;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
@@ -16,8 +15,8 @@ public class SpringConfiguration {
     }
 
     @Bean
-    public RedisTemplate<Integer, Contract> redisTemplate() {
-        RedisTemplate<Integer, Contract> template = new RedisTemplate<>();
+    RedisTemplate<Object, Object> redisTemplate() {
+        RedisTemplate<Object, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(jedisConnectionFactory());
         return template;
     }
