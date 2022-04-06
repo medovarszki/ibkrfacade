@@ -1,9 +1,10 @@
 package hu.auxin.ibkrgateway.twsapi;
 
 import com.ib.client.*;
-import hu.auxin.ibkrgateway.TWS;
+import hu.auxin.ibkrgateway.TwsClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.stereotype.Component;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -11,12 +12,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 
-//! [ewrapperimpl]
-public class EWrapperImpl implements EWrapper {
+@Component
+public class TwsReader implements EWrapper {
 
-    private static final Logger LOG = LogManager.getLogger(EWrapperImpl.class);
+    private static final Logger LOG = LogManager.getLogger(TwsReader.class);
 
     //! [socket_declare]
     private EReaderSignal readerSignal;
@@ -25,7 +25,7 @@ public class EWrapperImpl implements EWrapper {
     //! [socket_declare]
 
     //! [socket_init]
-    public EWrapperImpl() {
+    public TwsReader() {
         readerSignal = new EJavaSignal();
         clientSocket = new EClientSocket(this, readerSignal);
     }
@@ -46,7 +46,7 @@ public class EWrapperImpl implements EWrapper {
     //! [tickprice]
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
-        //System.out.println("Tick Price. Ticker Id:" + tickerId + ", Field: " + field + ", Price: " + price + ", CanAutoExecute: " + attribs.canAutoExecute() + ", pastLimit: " + attribs.pastLimit() + ", pre-open: " + attribs.preOpen());
+        System.out.println("Tick Price. Ticker Id:" + tickerId + ", Field: " + field + ", Price: " + price + ", CanAutoExecute: " + attribs.canAutoExecute() + ", pastLimit: " + attribs.pastLimit() + ", pre-open: " + attribs.preOpen());
     }
     //! [tickprice]
 
@@ -54,17 +54,7 @@ public class EWrapperImpl implements EWrapper {
     @Override
     public void tickSize(int tickerId, int field, int size) {
         TickType tickType = TickType.get(field);
-        switch (tickType) {
-            case ASK_OPTION:
-            case BID_OPTION:
-            case LAST_OPTION:
-            case OPTION_IMPLIED_VOL:
-//                Contract contract = dataHandler.subscriptions.get(tickerId);
-//                if(contract != null) {
-//                    dbHandler.insertOptionFieldData(tickerId, Timestamp.valueOf(LocalDateTime.now()), tickType.name(), String.valueOf(size));
-//                }
-        }
-        //System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + field + ", Size: " + size);
+        System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + field + ", Size: " + size);
     }
     //! [ticksize]
 
@@ -385,29 +375,6 @@ public class EWrapperImpl implements EWrapper {
         System.out.println("Display Group Updated. ReqId: " + reqId + ", Contract info: " + contractInfo + "\n");
     }
 
-    //! [displaygroupupdated]
-    @Override
-    public void error(Exception e) {
-        System.out.println("Exception: " + e.getMessage());
-    }
-
-    @Override
-    public void error(String str) {
-        System.out.println("Error STR");
-    }
-
-    //! [error]
-    @Override
-    public void error(int id, int errorCode, String errorMsg) {
-        System.out.println("Error. Id: " + id + ", Code: " + errorCode + ", Msg: " + errorMsg + "\n");
-    }
-
-    //! [error]
-    @Override
-    public void connectionClosed() {
-        System.out.println("Connection closed");
-    }
-
     //! [connectack]
     @Override
     public void connectAck() {
@@ -488,7 +455,7 @@ public class EWrapperImpl implements EWrapper {
         for (ContractDescription cd : contractDescriptions) {
             resultList.add(cd.contract());
         }
-        TWS.RESULT.put(reqId, resultList);
+        TwsClient.RESULT.put(reqId, resultList);
     }
     //! [symbolSamples]
 
@@ -698,4 +665,29 @@ public class EWrapperImpl implements EWrapper {
         System.out.println(EWrapperMsgGenerator.completedOrdersEnd());
     }
     //! [completedordersend]
+
+
+    //! [displaygroupupdated]
+    @Override
+    public void error(Exception e) {
+        LOG.error(e);
+    }
+
+    @Override
+    public void error(String str) {
+        LOG.error(str);
+    }
+
+    //! [error]
+    @Override
+    public void error(int id, int errorCode, String errorMsg) {
+        LOG.error("Error id: {}; Code: {}: {}", id, errorCode, errorMsg);
+    }
+
+    //! [error]
+    @Override
+    public void connectionClosed() {
+        LOG.info("Connection closed");
+    }
+
 }

@@ -3,7 +3,7 @@ package hu.auxin.ibkrgateway;
 import com.ib.client.*;
 import hu.auxin.ibkrgateway.twsapi.AvailableAlgoParams;
 import hu.auxin.ibkrgateway.twsapi.ContractSamples;
-import hu.auxin.ibkrgateway.twsapi.EWrapperImpl;
+import hu.auxin.ibkrgateway.twsapi.TwsReader;
 import hu.auxin.ibkrgateway.twsapi.OrderSamples;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,9 +20,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 @Scope("singleton")
-public class TWS {
+public class TwsClient {
 
-    private static final Logger LOG = LogManager.getLogger(TWS.class);
+    private static final Logger LOG = LogManager.getLogger(TwsClient.class);
 
     public static final Map<Integer, Object> RESULT = new HashMap<>();
 
@@ -36,11 +36,11 @@ public class TWS {
     private RedisTemplate redisTemplate;
 
     private EClientSocket client;
-    private EWrapperImpl wrapper;
+    private TwsReader wrapper;
 
     private static AtomicInteger autoIncrement = new AtomicInteger();
 
-    private TWS() {}
+    private TwsClient() {}
 
     private void waitForResult(int reqId) {
         while(true) {
@@ -76,7 +76,7 @@ public class TWS {
     }
 
     public void connect() {
-        wrapper = new EWrapperImpl();
+        wrapper = new TwsReader();
 
         client = wrapper.getClient();
         final EReaderSignal signal = wrapper.getSignal();

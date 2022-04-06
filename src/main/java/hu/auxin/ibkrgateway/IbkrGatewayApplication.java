@@ -12,7 +12,7 @@ public class IbkrGatewayApplication {
 
     public static void main(String[] args) {
         //startup spring
-        TWS tws = SpringApplication.run(IbkrGatewayApplication.class, args).getBean(TWS.class);
+        TwsClient tws = SpringApplication.run(IbkrGatewayApplication.class, args).getBean(TwsClient.class);
 
         //connect to TWS
         tws.connect();

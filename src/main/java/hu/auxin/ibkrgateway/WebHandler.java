@@ -10,7 +10,7 @@ import java.util.List;
 public class WebHandler {
 
     @Autowired
-    private TWS tws;
+    private TwsClient tws;
 
     @GetMapping("/search")
     public List<Contract> searchContract(@RequestParam String query) {
