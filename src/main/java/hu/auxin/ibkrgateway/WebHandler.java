@@ -2,9 +2,7 @@ package hu.auxin.ibkrgateway;
 
 import com.ib.client.Contract;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -12,24 +10,15 @@ import java.util.List;
 public class WebHandler {
 
     @Autowired
-    TWS tws;
+    private TWS tws;
 
-    @PostMapping("/search")
-    public List<Contract> searchContract(String query) {
-        tws.searchContract(query);
-        //TODO find possible contracts by string
-        return null;
+    @GetMapping("/search")
+    public List<Contract> searchContract(@RequestParam String query) {
+        return tws.searchContract(query);
     }
 
     @PostMapping("/subscribe")
-    public Contract subscirbeToContract(@RequestBody Contract contract) {
-
-//        Contract stk = new Contract();
-//        stk.symbol("TSLA");
-//        stk.secType(Types.SecType.STK);
-//        stk.currency("USD");
-//        stk.exchange("SMART");
-//
+    public Contract subscribeToContract(@RequestBody Contract contract) {
         tws.subscribeToContract(contract);
         return contract;
     }

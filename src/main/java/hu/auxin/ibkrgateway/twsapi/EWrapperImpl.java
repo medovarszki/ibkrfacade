@@ -1,15 +1,22 @@
 package hu.auxin.ibkrgateway.twsapi;
 
 import com.ib.client.*;
+import hu.auxin.ibkrgateway.TWS;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.text.DecimalFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 
 //! [ewrapperimpl]
 public class EWrapperImpl implements EWrapper {
+
+    private static final Logger LOG = LogManager.getLogger(EWrapperImpl.class);
 
     //! [socket_declare]
     private EReaderSignal readerSignal;
@@ -477,20 +484,11 @@ public class EWrapperImpl implements EWrapper {
     //! [symbolSamples]
     @Override
     public void symbolSamples(int reqId, ContractDescription[] contractDescriptions) {
-        System.out.println("Contract Descriptions. Request: " + reqId + "\n");
+        List<Contract> resultList = new ArrayList<>();
         for (ContractDescription cd : contractDescriptions) {
-            Contract c = cd.contract();
-            StringBuilder derivativeSecTypesSB = new StringBuilder();
-            for (String str : cd.derivativeSecTypes()) {
-                derivativeSecTypesSB.append(str);
-                derivativeSecTypesSB.append(",");
-            }
-            System.out.print("Contract. ConId: " + c.conid() + ", Symbol: " + c.symbol() + ", SecType: " + c.secType() +
-                    ", PrimaryExch: " + c.primaryExch() + ", Currency: " + c.currency() +
-                    ", DerivativeSecTypes:[" + derivativeSecTypesSB.toString() + "]");
+            resultList.add(cd.contract());
         }
-
-        System.out.println();
+        TWS.RESULT.put(reqId, resultList);
     }
     //! [symbolSamples]
 

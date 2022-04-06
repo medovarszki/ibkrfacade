@@ -12,11 +12,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
@@ -24,6 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TWS {
 
     private static final Logger LOG = LogManager.getLogger(TWS.class);
+
+    public static final Map<Integer, Object> RESULT = new HashMap<>();
 
     @Value("${ibkr.tws.host}")
     private String TWS_HOST;
@@ -41,14 +42,37 @@ public class TWS {
 
     private TWS() {}
 
-    public void searchContract(String search) {
-        client.reqMatchingSymbols(autoIncrement.get(), search);
+    private void waitForResult(int reqId) {
+        while(true) {
+            if(RESULT.containsKey(reqId)) {
+                return;
+            }
+        }
+    }
+
+    public List<Contract> searchContract(String search) {
+        if(StringUtils.hasLength(search)) {
+            LOG.debug("Searching for contracts: {}", search);
+            int i = autoIncrement.getAndIncrement();
+            client.reqMatchingSymbols(i, search);
+            waitForResult(i);
+            return (List<Contract>) RESULT.get(i);
+        }
+        return Collections.emptyList();
+    }
+
+    public ContractDetails requestContractDetails(Contract contract) {
+        LOG.debug("Request contract details: {}", contract);
+        int i = autoIncrement.getAndIncrement();
+        client.reqContractDetails(i, contract);
+        waitForResult(i);
+        return (ContractDetails) RESULT.get(i);
     }
 
     public void subscribeToContract(Contract contract) {
-//        final int currentId = ++autoIncrement;
-//        client.reqMktData(currentId, contract, "", false, false, null);
-//        redisTemplate.opsForHash().putIfAbsent(currentId, contract, null);
+        final int currentId = autoIncrement.getAndIncrement();
+        redisTemplate.opsForHash().putIfAbsent(currentId, contract, null);
+        client.reqMktData(currentId, contract, "", false, false, null);
     }
 
     public void connect() {
@@ -108,10 +132,6 @@ public class TWS {
         //historicalTicks(wrapper.getClient());
 
         //client.eDisconnect();
-    }
-
-    private void getDailyPnl() {
-
     }
 
     private static void histogram(EClientSocket client) {
