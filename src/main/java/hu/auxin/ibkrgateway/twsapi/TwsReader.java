@@ -1,10 +1,9 @@
 package hu.auxin.ibkrgateway.twsapi;
 
 import com.ib.client.*;
-import hu.auxin.ibkrgateway.TwsClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.stereotype.Component;
+import org.springframework.data.redis.core.RedisTemplate;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
@@ -13,10 +12,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-@Component
 public class TwsReader implements EWrapper {
 
     private static final Logger LOG = LogManager.getLogger(TwsReader.class);
+
+    private Map<Integer, Object> resultMap;
 
     //! [socket_declare]
     private EReaderSignal readerSignal;
@@ -25,7 +25,8 @@ public class TwsReader implements EWrapper {
     //! [socket_declare]
 
     //! [socket_init]
-    public TwsReader() {
+    public TwsReader(Map<Integer, Object> resultMap) {
+        this.resultMap = resultMap;
         readerSignal = new EJavaSignal();
         clientSocket = new EClientSocket(this, readerSignal);
     }
@@ -46,6 +47,7 @@ public class TwsReader implements EWrapper {
     //! [tickprice]
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
+//        Contract c = (Contract) redisTemplate.opsForValue().get(tickerId);
         System.out.println("Tick Price. Ticker Id:" + tickerId + ", Field: " + field + ", Price: " + price + ", CanAutoExecute: " + attribs.canAutoExecute() + ", pastLimit: " + attribs.pastLimit() + ", pre-open: " + attribs.preOpen());
     }
     //! [tickprice]
@@ -455,7 +457,7 @@ public class TwsReader implements EWrapper {
         for (ContractDescription cd : contractDescriptions) {
             resultList.add(cd.contract());
         }
-        TwsClient.RESULT.put(reqId, resultList);
+        resultMap.put(reqId, resultList);
     }
     //! [symbolSamples]
 
