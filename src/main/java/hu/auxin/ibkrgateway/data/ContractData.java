@@ -10,17 +10,22 @@ import java.io.Serializable;
 public class ContractData implements Serializable {
 
     @Id
-    private String conid;
+    private Integer conid;
 
     private Contract contract;
 
     private Integer streamId;
 
-    public String getConid() {
+    public ContractData(Contract contract) {
+        this.conid = contract.conid();
+        this.contract = contract;
+    }
+
+    public Integer getConid() {
         return conid;
     }
 
-    public void setConid(String conid) {
+    public void setConid(Integer conid) {
         this.conid = conid;
     }
 

@@ -9,8 +9,11 @@ import java.util.List;
 @RestController
 public class WebHandler {
 
-    @Autowired
-    private TwsClient tws;
+    private TWS tws;
+
+    WebHandler(@Autowired TWS tws) {
+        this.tws = tws;
+    }
 
     @GetMapping("/search")
     public List<Contract> searchContract(@RequestParam String query) {
@@ -18,8 +21,8 @@ public class WebHandler {
     }
 
     @PostMapping("/subscribe")
-    public Contract subscribeToContract(@RequestBody Contract contract) {
-        tws.subscribeToContract(contract);
+    public Contract subscribeMarketData(@RequestBody Contract contract) {
+        tws.subscribeMarketData(contract);
         return contract;
     }
 }

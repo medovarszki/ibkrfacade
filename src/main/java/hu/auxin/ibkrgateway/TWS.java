@@ -1,54 +1,129 @@
-package hu.auxin.ibkrgateway.twsapi;
+package hu.auxin.ibkrgateway;
 
 import com.ib.client.*;
+import hu.auxin.ibkrgateway.data.ContractData;
+import hu.auxin.ibkrgateway.data.PriceData;
+import hu.auxin.ibkrgateway.data.repository.ContractRepository;
+import hu.auxin.ibkrgateway.data.repository.PriceRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class TwsReader implements EWrapper {
+@Component
+@Scope("singleton")
+public final class TWS implements EWrapper {
 
-    private static final Logger LOG = LogManager.getLogger(TwsReader.class);
+    private static final Logger LOG = LogManager.getLogger(TWS.class);
 
-    private Map<Integer, Object> resultMap;
+    @Value("${ibkr.tws.host}")
+    private String TWS_HOST;
 
-    //! [socket_declare]
-    private EReaderSignal readerSignal;
-    private EClientSocket clientSocket;
-    protected int currentOrderId = -1;
-    //! [socket_declare]
+    @Value("${ibkr.tws.port}")
+    private int TWS_PORT;
 
-    //! [socket_init]
-    public TwsReader(Map<Integer, Object> resultMap) {
-        this.resultMap = resultMap;
-        readerSignal = new EJavaSignal();
-        clientSocket = new EClientSocket(this, readerSignal);
+    private ContractRepository contractRepository;
+    private PriceRepository priceRepository;
+
+    private EReaderSignal readerSignal = new EJavaSignal();
+    private EClientSocket client = new EClientSocket(this, readerSignal);
+    private int currentOrderId = -1;
+    private static AtomicInteger autoIncrement = new AtomicInteger();
+    private final Map<Integer, Object> results = new HashMap<>();
+
+    TWS(@Autowired ContractRepository contractRepository, @Autowired PriceRepository priceRepository) {
+        this.contractRepository = contractRepository;
+        this.priceRepository = priceRepository;
     }
 
-    //! [socket_init]
-    public EClientSocket getClient() {
-        return clientSocket;
+    private void waitForResult(int reqId) {
+        while(true) {
+            if(results.containsKey(reqId)) {
+                return;
+            }
+        }
     }
 
-    public EReaderSignal getSignal() {
-        return readerSignal;
+    public void connect() {
+        client.eConnect(TWS_HOST, TWS_PORT, 2);
+
+        final EReader reader = new EReader(client, readerSignal);
+        reader.start();
+
+        //An additional thread is created in this program design to empty the messaging queue
+        new Thread(() -> {
+            while (client.isConnected()) {
+                readerSignal.waitForSignal();
+                try {
+                    reader.processMsgs();
+                } catch (Exception e) {
+                    LOG.error(e);
+                }
+            }
+        }).start();
     }
 
-    public int getCurrentOrderId() {
-        return currentOrderId;
+    public List<Contract> searchContract(String search) {
+        if(StringUtils.hasLength(search)) {
+            LOG.debug("Searching for contracts: {}", search);
+            int i = autoIncrement.getAndIncrement();
+            client.reqMatchingSymbols(i, search);
+            waitForResult(i); //TODO using async redis for wait for result
+            List<Contract> result = List.copyOf((List<Contract>) results.get(i));
+            results.remove(i);
+            return result;
+        }
+        return Collections.emptyList();
+    }
+
+    public ContractDetails requestContractDetails(Contract contract) {
+        LOG.debug("Request contract details: {}", contract);
+        int i = autoIncrement.getAndIncrement();
+        client.reqContractDetails(i, contract);
+        waitForResult(i);
+        return (ContractDetails) results.get(i);
+    }
+
+    public void subscribeMarketData(Contract contract) {
+        final int currentId = autoIncrement.getAndIncrement();
+        Optional<ContractData> contractDataOptional = contractRepository.findById(contract.conid());
+        ContractData contractData = contractDataOptional.orElse(new ContractData(contract));
+        contractData.setStreamId(currentId);
+        contractRepository.save(contractData);
+        client.reqMktData(currentId, contract, "", false, false, null);
+    }
+
+
+    //-- TWS callbacks
+
+    @Override
+    public void connectAck() {
+        if (client.isAsyncEConnect()) {
+            System.out.println("Acknowledging connection");
+            client.startAPI();
+        }
     }
 
     //! [tickprice]
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
-//        Contract c = (Contract) redisTemplate.opsForValue().get(tickerId);
-        System.out.println("Tick Price. Ticker Id:" + tickerId + ", Field: " + field + ", Price: " + price + ", CanAutoExecute: " + attribs.canAutoExecute() + ", pastLimit: " + attribs.pastLimit() + ", pre-open: " + attribs.preOpen());
+        TickType tickType = TickType.get(field);
+        Optional<PriceData> priceDataOptional = priceRepository.findById(tickerId);
+        PriceData priceData = priceDataOptional.orElse(new PriceData(tickerId));
+        switch(tickType) {
+            case ASK: priceData.setAsk(price);
+            break;
+            case BID: priceData.setBid(price);
+            break;
+        }
+        priceRepository.save(priceData);
     }
     //! [tickprice]
 
@@ -56,7 +131,7 @@ public class TwsReader implements EWrapper {
     @Override
     public void tickSize(int tickerId, int field, int size) {
         TickType tickType = TickType.get(field);
-        System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + field + ", Size: " + size);
+        System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + tickType + ", Size: " + size);
     }
     //! [ticksize]
 
@@ -377,16 +452,6 @@ public class TwsReader implements EWrapper {
         System.out.println("Display Group Updated. ReqId: " + reqId + ", Contract info: " + contractInfo + "\n");
     }
 
-    //! [connectack]
-    @Override
-    public void connectAck() {
-        if (clientSocket.isAsyncEConnect()) {
-            System.out.println("Acknowledging connection");
-            clientSocket.startAPI();
-        }
-    }
-    //! [connectack]
-
     //! [positionmulti]
     @Override
     public void positionMulti(int reqId, String account, String modelCode, Contract contract, double pos, double avgCost) {
@@ -457,7 +522,7 @@ public class TwsReader implements EWrapper {
         for (ContractDescription cd : contractDescriptions) {
             resultList.add(cd.contract());
         }
-        resultMap.put(reqId, resultList);
+        results.put(reqId, resultList);
     }
     //! [symbolSamples]
 
@@ -484,10 +549,10 @@ public class TwsReader implements EWrapper {
 
     //! [smartcomponents]
     @Override
-    public void smartComponents(int reqId, Map<Integer, Entry<String, Character>> theMap) {
+    public void smartComponents(int reqId, Map<Integer, Map.Entry<String, Character>> theMap) {
         System.out.println("smart components req id:" + reqId);
 
-        for (Entry<Integer, Entry<String, Character>> item : theMap.entrySet()) {
+        for (Map.Entry<Integer, Map.Entry<String, Character>> item : theMap.entrySet()) {
             System.out.println("bit number: " + item.getKey() +
                     ", exchange: " + item.getValue().getKey() + ", exchange letter: " + item.getValue().getValue());
         }
