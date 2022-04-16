@@ -5,6 +5,7 @@ import hu.auxin.ibkrgateway.data.ContractData;
 import hu.auxin.ibkrgateway.data.PriceData;
 import hu.auxin.ibkrgateway.data.repository.ContractRepository;
 import hu.auxin.ibkrgateway.data.repository.PriceRepository;
+import hu.auxin.ibkrgateway.data.repository.TimeSeriesHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,18 +30,19 @@ public final class TWS implements EWrapper {
     @Value("${ibkr.tws.port}")
     private int TWS_PORT;
 
+    private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
     private PriceRepository priceRepository;
 
     private EReaderSignal readerSignal = new EJavaSignal();
     private EClientSocket client = new EClientSocket(this, readerSignal);
-    private int currentOrderId = -1;
     private static AtomicInteger autoIncrement = new AtomicInteger();
     private final Map<Integer, Object> results = new HashMap<>();
 
-    TWS(@Autowired ContractRepository contractRepository, @Autowired PriceRepository priceRepository) {
+    TWS(@Autowired ContractRepository contractRepository, @Autowired PriceRepository priceRepository, @Autowired TimeSeriesHandler timeSeriesHandler) {
         this.contractRepository = contractRepository;
         this.priceRepository = priceRepository;
+        this.timeSeriesHandler = timeSeriesHandler;
     }
 
     private void waitForResult(int reqId) {
@@ -95,7 +97,7 @@ public final class TWS implements EWrapper {
         final int currentId = autoIncrement.getAndIncrement();
         Optional<ContractData> contractDataOptional = contractRepository.findById(contract.conid());
         ContractData contractData = contractDataOptional.orElse(new ContractData(contract));
-        contractData.setStreamId(currentId);
+        contractData.setRequestId(currentId);
         contractRepository.save(contractData);
         client.reqMktData(currentId, contract, "", false, false, null);
     }
@@ -116,6 +118,11 @@ public final class TWS implements EWrapper {
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
         TickType tickType = TickType.get(field);
         Optional<PriceData> priceDataOptional = priceRepository.findById(tickerId);
+
+        if(priceDataOptional.isEmpty()) {
+            timeSeriesHandler.createStream("stream_" + tickerId);
+        }
+
         PriceData priceData = priceDataOptional.orElse(new PriceData(tickerId));
         switch(tickType) {
             case ASK: priceData.setAsk(price);
@@ -123,6 +130,7 @@ public final class TWS implements EWrapper {
             case BID: priceData.setBid(price);
             break;
         }
+        timeSeriesHandler.addToStream("stream_" + tickerId, price);
         priceRepository.save(priceData);
     }
     //! [tickprice]
@@ -233,7 +241,6 @@ public final class TWS implements EWrapper {
     @Override
     public void nextValidId(int orderId) {
         System.out.println("Next Valid Id: [" + orderId + "]");
-        currentOrderId = orderId;
     }
     //! [nextvalidid]
 

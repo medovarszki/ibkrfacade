@@ -8,15 +8,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.ib.client.Contract;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
-import org.springframework.data.redis.core.ReactiveRedisOperations;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.*;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericToStringSerializer;
 
 @Configuration
 public class SpringConfiguration {
@@ -36,15 +36,33 @@ public class SpringConfiguration {
         return mapper;
     }
 
+//    @Bean
+//    LettuceConnectionFactory connectionFactory() {
+//        RedisStandaloneConfiguration redisConfiguration = new RedisStandaloneConfiguration(REDIS_HOST, REDIS_PORT);
+//        redisConfiguration.setPassword("yR3nnOrzswO3QErFOIgm1gDt0UFwn1sL");
+//        return new LettuceConnectionFactory(redisConfiguration);
+//    }
+
     @Bean
-    LettuceConnectionFactory connectionFactory() {
-        return new LettuceConnectionFactory(new RedisStandaloneConfiguration(REDIS_HOST, REDIS_PORT));
+    JedisConnectionFactory jedisConnectionFactory() {
+        RedisProperties properties = redisProperties();
+        RedisStandaloneConfiguration configuration = new RedisStandaloneConfiguration();
+        configuration.setHostName(properties.getHost());
+        configuration.setPort(properties.getPort());
+        configuration.setPassword(properties.getPassword());
+        JedisConnectionFactory jedisConnectionFactory = new JedisConnectionFactory(configuration);
+        return jedisConnectionFactory;
+    }
+
+    @Bean
+    public RedisProperties redisProperties() {
+        return new RedisProperties();
     }
 
     @Bean
     RedisTemplate<Object, Object> redisTemplate() {
         RedisTemplate<Object, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory());
+        template.setConnectionFactory(jedisConnectionFactory());
         template.setDefaultSerializer(new GenericJackson2JsonRedisSerializer());
         template.setKeySerializer(new GenericToStringSerializer(Contract.class));
         template.setHashKeySerializer(new GenericJackson2JsonRedisSerializer());
@@ -52,11 +70,4 @@ public class SpringConfiguration {
         return template;
     }
 
-    @Bean
-    ReactiveRedisOperations<Integer, Contract> redisOperations(ReactiveRedisConnectionFactory factory) {
-        Jackson2JsonRedisSerializer<Contract> serializer = new Jackson2JsonRedisSerializer<>(Contract.class);
-        RedisSerializationContext.RedisSerializationContextBuilder<Integer, Contract> builder = RedisSerializationContext.newSerializationContext(new StringRedisSerializer());
-        RedisSerializationContext<Integer, Contract> context = builder.value(serializer).build();
-        return new ReactiveRedisTemplate<>(factory, context);
-    }
 }

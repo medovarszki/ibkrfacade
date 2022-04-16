@@ -14,7 +14,7 @@ public class ContractData implements Serializable {
 
     private Contract contract;
 
-    private Integer streamId;
+    private Integer requestId;
 
     public ContractData(Contract contract) {
         this.conid = contract.conid();
@@ -37,11 +37,11 @@ public class ContractData implements Serializable {
         this.contract = contract;
     }
 
-    public Integer getStreamId() {
-        return streamId;
+    public Integer getRequestId() {
+        return requestId;
     }
 
-    public void setStreamId(Integer streamId) {
-        this.streamId = streamId;
+    public void setRequestId(Integer requestId) {
+        this.requestId = requestId;
     }
 }

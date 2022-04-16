@@ -9,23 +9,23 @@ import java.io.Serializable;
 public class PriceData implements Serializable {
 
     @Id
-    private Integer streamId;
+    private Integer requestId;
 
     private Double bid;
     private Double ask;
     private Double lastPrice;
     private Double volume;
 
-    public PriceData(Integer streamId) {
-        this.streamId = streamId;
+    public PriceData(Integer requestId) {
+        this.requestId = requestId;
     }
 
-    public Integer getStreamId() {
-        return streamId;
+    public Integer getRequestId() {
+        return requestId;
     }
 
-    public void setStreamId(Integer streamId) {
-        this.streamId = streamId;
+    public void setRequestId(Integer requestId) {
+        this.requestId = requestId;
     }
 
     public Double getBid() {
