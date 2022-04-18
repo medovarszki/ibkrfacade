@@ -1,5 +1,6 @@
 package hu.auxin.ibkrgateway.data;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
 
@@ -9,6 +10,7 @@ import java.io.Serializable;
 public class PriceData implements Serializable {
 
     @Id
+    @JsonIgnore
     private Integer requestId;
 
     private Double bid;
@@ -16,8 +18,13 @@ public class PriceData implements Serializable {
     private Double lastPrice;
     private Double volume;
 
-    public PriceData(Integer requestId) {
+    public PriceData(int requestId) {
         this.requestId = requestId;
+    }
+
+    public PriceData(double bid, double ask) {
+        this.bid = bid;
+        this.ask = ask;
     }
 
     public Integer getRequestId() {

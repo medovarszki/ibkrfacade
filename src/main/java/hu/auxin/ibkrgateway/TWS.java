@@ -2,7 +2,6 @@ package hu.auxin.ibkrgateway;
 
 import com.ib.client.*;
 import hu.auxin.ibkrgateway.data.ContractData;
-import hu.auxin.ibkrgateway.data.PriceData;
 import hu.auxin.ibkrgateway.data.repository.ContractRepository;
 import hu.auxin.ibkrgateway.data.repository.PriceRepository;
 import hu.auxin.ibkrgateway.data.repository.TimeSeriesHandler;
@@ -13,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import redis.clients.jedis.exceptions.JedisDataException;
 
 import java.text.DecimalFormat;
 import java.util.*;
@@ -99,6 +99,11 @@ public final class TWS implements EWrapper {
         ContractData contractData = contractDataOptional.orElse(new ContractData(contract));
         contractData.setRequestId(currentId);
         contractRepository.save(contractData);
+        try {
+            timeSeriesHandler.createStream(currentId, contract);
+        } catch(JedisDataException e) {
+            LOG.error(e.getMessage());
+        }
         client.reqMktData(currentId, contract, "", false, false, null);
     }
 
@@ -117,21 +122,29 @@ public final class TWS implements EWrapper {
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
         TickType tickType = TickType.get(field);
-        Optional<PriceData> priceDataOptional = priceRepository.findById(tickerId);
-
-        if(priceDataOptional.isEmpty()) {
-            timeSeriesHandler.createStream("stream_" + tickerId);
+//        Optional<PriceData> priceDataOptional = priceRepository.findById(tickerId);
+//
+//        if(priceDataOptional.isEmpty()) {
+//            timeSeriesHandler.createStream("stream_" + tickerId);
+//        }
+//
+//        PriceData priceData = priceDataOptional.orElse(new PriceData(tickerId));
+//        switch(tickType) {
+//            case ASK: priceData.setAsk(price);
+//            break;
+//            case BID: priceData.setBid(price);
+//            break;
+//            default:
+//                LOG.debug("Skip tick type {}", tickType);
+//                return; //skip tick
+//        }
+        if(Set.of(TickType.ASK, TickType.BID).contains(tickType)) {
+            timeSeriesHandler.addToStream(tickerId, price, tickType);
+            LOG.info("Tick added to stream {}: {}", tickType, price);
+        } else {
+            LOG.debug("Skip tick type {}", tickType);
         }
-
-        PriceData priceData = priceDataOptional.orElse(new PriceData(tickerId));
-        switch(tickType) {
-            case ASK: priceData.setAsk(price);
-            break;
-            case BID: priceData.setBid(price);
-            break;
-        }
-        timeSeriesHandler.addToStream("stream_" + tickerId, price);
-        priceRepository.save(priceData);
+//        priceRepository.save(priceData);
     }
     //! [tickprice]
 
@@ -139,7 +152,7 @@ public final class TWS implements EWrapper {
     @Override
     public void tickSize(int tickerId, int field, int size) {
         TickType tickType = TickType.get(field);
-        System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + tickType + ", Size: " + size);
+//        System.out.println("Tick Size. Ticker Id:" + tickerId + ", Field: " + tickType + ", Size: " + size);
     }
     //! [ticksize]
 
@@ -165,7 +178,7 @@ public final class TWS implements EWrapper {
     @Override
     public void tickString(int tickerId, int tickType, String value) {
         TickType type = TickType.get(tickType);
-        System.out.println("Tick string. Ticker Id:" + tickerId + ", Type: " + type.name() + ", Value: " + value);
+//        System.out.println("Tick string. Ticker Id:" + tickerId + ", Type: " + type.name() + ", Value: " + value);
     }
 
     //! [tickstring]
