@@ -20,6 +20,9 @@ Furthermore you have to install a [Trading Workstation](https://www.interactiveb
 
 **See more:** https://interactivebrokers.github.io/tws-api/initial_setup.html
 
+### TWS API
+You have to download the TWS API from https://interactivebrokers.github.io for Java. I contains a TwsApi.jar file which you need to have on your classpath. (You can find a working version of it in the /lib folder of this repository.) This is a legacy JAR maintained by Interactive Brokers and you cannot find it in the central Maven repository, so if you want to build this project with Maven, you need to manually add it to your local artifact repository (see pom.xml dependencies section), or make it avalable on the classpath some other way.
+
 ### Redis server
 Redis is a powerful tool for further data distribution or processing. If you have a Redis server up and running, you can configure its access through the application.properties file, then the library will send the market data to the Redis for the subscribed instruments.
 
