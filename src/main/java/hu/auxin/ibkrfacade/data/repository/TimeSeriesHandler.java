@@ -1,9 +1,9 @@
-package hu.auxin.ibkrgateway.data.repository;
+package hu.auxin.ibkrfacade.data.repository;
 
 import com.ib.client.Contract;
 import com.ib.client.TickType;
 import com.redislabs.redistimeseries.RedisTimeSeries;
-import hu.auxin.ibkrgateway.data.PriceData;
+import hu.auxin.ibkrfacade.data.PriceData;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;

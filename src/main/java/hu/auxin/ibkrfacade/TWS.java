@@ -1,10 +1,10 @@
-package hu.auxin.ibkrgateway;
+package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
-import hu.auxin.ibkrgateway.data.ContractData;
-import hu.auxin.ibkrgateway.data.repository.ContractRepository;
-import hu.auxin.ibkrgateway.data.repository.PriceRepository;
-import hu.auxin.ibkrgateway.data.repository.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.data.ContractData;
+import hu.auxin.ibkrfacade.data.repository.ContractRepository;
+import hu.auxin.ibkrfacade.data.repository.PriceRepository;
+import hu.auxin.ibkrfacade.data.repository.TimeSeriesHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;

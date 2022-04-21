@@ -1,6 +1,6 @@
-package hu.auxin.ibkrgateway.data.repository;
+package hu.auxin.ibkrfacade.data.repository;
 
-import hu.auxin.ibkrgateway.data.PriceData;
+import hu.auxin.ibkrfacade.data.PriceData;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 

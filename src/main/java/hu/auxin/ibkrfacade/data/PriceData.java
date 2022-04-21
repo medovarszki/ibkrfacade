@@ -1,4 +1,4 @@
-package hu.auxin.ibkrgateway.data;
+package hu.auxin.ibkrfacade.data;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;

@@ -1,10 +1,10 @@
-package hu.auxin.ibkrgateway;
+package hu.auxin.ibkrfacade;
 
 import com.ib.client.Contract;
-import hu.auxin.ibkrgateway.data.ContractData;
-import hu.auxin.ibkrgateway.data.PriceData;
-import hu.auxin.ibkrgateway.data.repository.ContractRepository;
-import hu.auxin.ibkrgateway.data.repository.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.data.ContractData;
+import hu.auxin.ibkrfacade.data.PriceData;
+import hu.auxin.ibkrfacade.data.repository.ContractRepository;
+import hu.auxin.ibkrfacade.data.repository.TimeSeriesHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
