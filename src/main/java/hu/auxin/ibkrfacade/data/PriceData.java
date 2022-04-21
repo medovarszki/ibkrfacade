@@ -2,11 +2,9 @@ package hu.auxin.ibkrfacade.data;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.redis.core.RedisHash;
 
 import java.io.Serializable;
 
-@RedisHash("pricedata")
 public class PriceData implements Serializable {
 
     @Id

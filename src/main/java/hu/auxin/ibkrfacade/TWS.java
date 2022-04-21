@@ -2,9 +2,8 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
 import hu.auxin.ibkrfacade.data.ContractData;
-import hu.auxin.ibkrfacade.data.repository.ContractRepository;
-import hu.auxin.ibkrfacade.data.repository.PriceRepository;
-import hu.auxin.ibkrfacade.data.repository.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.data.redis.ContractRepository;
+import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,16 +31,14 @@ public final class TWS implements EWrapper {
 
     private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
-    private PriceRepository priceRepository;
 
     private EReaderSignal readerSignal = new EJavaSignal();
     private EClientSocket client = new EClientSocket(this, readerSignal);
     private static AtomicInteger autoIncrement = new AtomicInteger();
     private final Map<Integer, Object> results = new HashMap<>();
 
-    TWS(@Autowired ContractRepository contractRepository, @Autowired PriceRepository priceRepository, @Autowired TimeSeriesHandler timeSeriesHandler) {
+    TWS(@Autowired ContractRepository contractRepository, @Autowired TimeSeriesHandler timeSeriesHandler) {
         this.contractRepository = contractRepository;
-        this.priceRepository = priceRepository;
         this.timeSeriesHandler = timeSeriesHandler;
     }
 
@@ -122,22 +119,6 @@ public final class TWS implements EWrapper {
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
         TickType tickType = TickType.get(field);
-//        Optional<PriceData> priceDataOptional = priceRepository.findById(tickerId);
-//
-//        if(priceDataOptional.isEmpty()) {
-//            timeSeriesHandler.createStream("stream_" + tickerId);
-//        }
-//
-//        PriceData priceData = priceDataOptional.orElse(new PriceData(tickerId));
-//        switch(tickType) {
-//            case ASK: priceData.setAsk(price);
-//            break;
-//            case BID: priceData.setBid(price);
-//            break;
-//            default:
-//                LOG.debug("Skip tick type {}", tickType);
-//                return; //skip tick
-//        }
         if(Set.of(TickType.ASK, TickType.BID).contains(tickType)) {
             timeSeriesHandler.addToStream(tickerId, price, tickType);
             LOG.info("Tick added to stream {}: {}", tickType, price);

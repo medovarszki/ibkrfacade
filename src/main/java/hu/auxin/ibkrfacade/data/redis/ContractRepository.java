@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade.data.repository;
+package hu.auxin.ibkrfacade.data.redis;
 
 import hu.auxin.ibkrfacade.data.ContractData;
 import org.springframework.data.repository.CrudRepository;

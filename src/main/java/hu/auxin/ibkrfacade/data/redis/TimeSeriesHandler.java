@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade.data.repository;
+package hu.auxin.ibkrfacade.data.redis;
 
 import com.ib.client.Contract;
 import com.ib.client.TickType;
