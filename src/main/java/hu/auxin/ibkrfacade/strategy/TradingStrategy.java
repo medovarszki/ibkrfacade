@@ -1,12 +1,18 @@
 package hu.auxin.ibkrfacade.strategy;
 
+import com.ib.client.Contract;
+import hu.auxin.ibkrfacade.data.ContractData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+
+import java.util.Optional;
 
 @Service
 public class TradingStrategy {
@@ -21,8 +27,14 @@ public class TradingStrategy {
         this.contractRepository = contractRepository;
     }
 
-    @Scheduled(fixedRate = 60*1000)
-    private void checkTradingSignal() {
+    @Scheduled(fixedRate = 5*1000)
+    private void checkTradingSignal(){
         LOG.info("Scheduled method call");
+
+        Optional<ContractData> contractData = contractRepository.findById(265598);
+        int requestId = contractData.orElseThrow(() -> new RuntimeException("No contract found in Redis with conid 265598")).getRequestId();
+
+        double value = timeSeriesHandler.getInstance().get("stream:" + requestId + ":ASK").getValue();
+        LOG.info("Scheduled method call end: {}", value);
     }
 }

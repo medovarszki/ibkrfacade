@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.Map;
 
@@ -20,7 +21,12 @@ public class TimeSeriesHandler {
     private RedisTimeSeries rts;
 
     public TimeSeriesHandler(@Autowired RedisProperties redisProperties) {
-        this.rts = new RedisTimeSeries(redisProperties.getHost(), redisProperties.getPort(), redisProperties.getTimeout().toMillisPart(), 3, redisProperties.getPassword());
+        String password = StringUtils.hasText(redisProperties.getPassword()) ? redisProperties.getPassword() : null;
+        this.rts = new RedisTimeSeries(redisProperties.getHost(), redisProperties.getPort(), redisProperties.getTimeout().toMillisPart(), 3, password);
+    }
+
+    public RedisTimeSeries getInstance() {
+        return rts;
     }
 
     public void createStream(int key, Contract contract) {

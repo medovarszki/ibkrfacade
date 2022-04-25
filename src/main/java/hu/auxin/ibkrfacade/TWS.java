@@ -125,7 +125,6 @@ public final class TWS implements EWrapper {
         } else {
             LOG.debug("Skip tick type {}", tickType);
         }
-//        priceRepository.save(priceData);
     }
     //! [tickprice]
 

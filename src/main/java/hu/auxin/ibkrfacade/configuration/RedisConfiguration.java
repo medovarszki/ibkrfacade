@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade;
+package hu.auxin.ibkrfacade.configuration;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.ib.client.Contract;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,13 +17,7 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.GenericToStringSerializer;
 
 @Configuration
-public class SpringConfiguration {
-
-    @Value("${spring.redis.host}")
-    private String REDIS_HOST;
-
-    @Value("${spring.redis.port}")
-    private int REDIS_PORT;
+public class RedisConfiguration {
 
     @Bean
     ObjectMapper objectMapper() {
@@ -34,13 +27,6 @@ public class SpringConfiguration {
                 .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         return mapper;
     }
-
-//    @Bean
-//    LettuceConnectionFactory connectionFactory() {
-//        RedisStandaloneConfiguration redisConfiguration = new RedisStandaloneConfiguration(REDIS_HOST, REDIS_PORT);
-//        redisConfiguration.setPassword("yR3nnOrzswO3QErFOIgm1gDt0UFwn1sL");
-//        return new LettuceConnectionFactory(redisConfiguration);
-//    }
 
     @Bean
     JedisConnectionFactory jedisConnectionFactory() {
