@@ -2,7 +2,9 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
 import hu.auxin.ibkrfacade.data.ContractData;
+import hu.auxin.ibkrfacade.data.OrderData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
+import hu.auxin.ibkrfacade.data.redis.OrderRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -19,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 @Scope("singleton")
-public final class TWS implements EWrapper {
+public final class TWS implements EWrapper, TwsHandler {
 
     private static final Logger LOG = LogManager.getLogger(TWS.class);
 
@@ -29,25 +31,31 @@ public final class TWS implements EWrapper {
     @Value("${ibkr.tws.port}")
     private int TWS_PORT;
 
+    @Value("${ibkr.tws.account}")
+    private String ACCOUNT;
+
     private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
+    private OrderRepository orderRepository;
 
     private EReaderSignal readerSignal = new EJavaSignal();
     private EClientSocket client = new EClientSocket(this, readerSignal);
     private static AtomicInteger autoIncrement = new AtomicInteger();
     private final Map<Integer, Object> results = new HashMap<>();
 
-    TWS(@Autowired ContractRepository contractRepository, @Autowired TimeSeriesHandler timeSeriesHandler) {
-        this.contractRepository = contractRepository;
+    TWS(@Autowired ContractRepository contractRepository,
+        @Autowired OrderRepository orderRepository,
+        @Autowired TimeSeriesHandler timeSeriesHandler) {
         this.timeSeriesHandler = timeSeriesHandler;
+        this.orderRepository = orderRepository;
+        this.contractRepository = contractRepository;
     }
 
     private void waitForResult(int reqId) {
-        while(true) {
-            if(results.containsKey(reqId)) {
-                return;
-            }
+        while(!results.containsKey(reqId)) {
+            continue;
         }
+        return;
     }
 
     public void connect() {
@@ -58,17 +66,20 @@ public final class TWS implements EWrapper {
 
         //An additional thread is created in this program design to empty the messaging queue
         new Thread(() -> {
-            while (client.isConnected()) {
+            while(client.isConnected()) {
                 readerSignal.waitForSignal();
                 try {
                     reader.processMsgs();
-                } catch (Exception e) {
+                } catch(Exception e) {
                     LOG.error(e);
                 }
             }
         }).start();
+
+        client.reqAccountUpdates(true, ACCOUNT);
     }
 
+    @Override
     public List<Contract> searchContract(String search) {
         if(StringUtils.hasLength(search)) {
             LOG.debug("Searching for contracts: {}", search);
@@ -82,6 +93,7 @@ public final class TWS implements EWrapper {
         return Collections.emptyList();
     }
 
+    @Override
     public ContractDetails requestContractDetails(Contract contract) {
         LOG.debug("Request contract details: {}", contract);
         int i = autoIncrement.getAndIncrement();
@@ -90,6 +102,7 @@ public final class TWS implements EWrapper {
         return (ContractDetails) results.get(i);
     }
 
+    @Override
     public void subscribeMarketData(Contract contract) {
         final int currentId = autoIncrement.getAndIncrement();
         Optional<ContractData> contractDataOptional = contractRepository.findById(contract.conid());
@@ -104,12 +117,17 @@ public final class TWS implements EWrapper {
         client.reqMktData(currentId, contract, "", false, false, null);
     }
 
+    @Override
+    public List<Order> getOrders() {
+        return null;
+    }
+
 
     //-- TWS callbacks
 
     @Override
     public void connectAck() {
-        if (client.isAsyncEConnect()) {
+        if(client.isAsyncEConnect()) {
             System.out.println("Acknowledging connection");
             client.startAPI();
         }
@@ -121,7 +139,7 @@ public final class TWS implements EWrapper {
         TickType tickType = TickType.get(field);
         if(Set.of(TickType.ASK, TickType.BID).contains(tickType)) {
             timeSeriesHandler.addToStream(tickerId, price, tickType);
-            LOG.info("Tick added to stream {}: {}", tickType, price);
+            LOG.debug("Tick added to stream {}: {}", tickType, price);
         } else {
             LOG.debug("Skip tick type {}", tickType);
         }
@@ -185,9 +203,9 @@ public final class TWS implements EWrapper {
 
     //! [openorder]
     @Override
-    public void openOrder(int orderId, Contract contract, Order order,
-                          OrderState orderState) {
-        System.out.println(EWrapperMsgGenerator.openOrder(orderId, contract, order, orderState));
+    public void openOrder(int orderId, Contract contract, Order order, OrderState orderState) {
+        OrderData orderData = new OrderData(orderId, order, contract, orderState);
+        orderRepository.save(orderData);
     }
     //! [openorder]
 
@@ -496,7 +514,7 @@ public final class TWS implements EWrapper {
     //! [softDollarTiers]
     @Override
     public void softDollarTiers(int reqId, SoftDollarTier[] tiers) {
-        for (SoftDollarTier tier : tiers) {
+        for(SoftDollarTier tier : tiers) {
             System.out.print("tier: " + tier.toString() + ", ");
         }
 
@@ -507,7 +525,7 @@ public final class TWS implements EWrapper {
     //! [familyCodes]
     @Override
     public void familyCodes(FamilyCode[] familyCodes) {
-        for (FamilyCode fc : familyCodes) {
+        for(FamilyCode fc : familyCodes) {
             System.out.print("Family Code. AccountID: " + fc.accountID() + ", FamilyCode: " + fc.familyCodeStr());
         }
 
@@ -519,7 +537,7 @@ public final class TWS implements EWrapper {
     @Override
     public void symbolSamples(int reqId, ContractDescription[] contractDescriptions) {
         List<Contract> resultList = new ArrayList<>();
-        for (ContractDescription cd : contractDescriptions) {
+        for(ContractDescription cd : contractDescriptions) {
             resultList.add(cd.contract());
         }
         results.put(reqId, resultList);
@@ -529,7 +547,7 @@ public final class TWS implements EWrapper {
     //! [mktDepthExchanges]
     @Override
     public void mktDepthExchanges(DepthMktDataDescription[] depthMktDataDescriptions) {
-        for (DepthMktDataDescription depthMktDataDescription : depthMktDataDescriptions) {
+        for(DepthMktDataDescription depthMktDataDescription : depthMktDataDescriptions) {
             System.out.println("Depth Mkt Data Description. Exchange: " + depthMktDataDescription.exchange() +
                     ", ListingExch: " + depthMktDataDescription.listingExch() +
                     ", SecType: " + depthMktDataDescription.secType() +
@@ -552,7 +570,7 @@ public final class TWS implements EWrapper {
     public void smartComponents(int reqId, Map<Integer, Map.Entry<String, Character>> theMap) {
         System.out.println("smart components req id:" + reqId);
 
-        for (Map.Entry<Integer, Map.Entry<String, Character>> item : theMap.entrySet()) {
+        for(Map.Entry<Integer, Map.Entry<String, Character>> item : theMap.entrySet()) {
             System.out.println("bit number: " + item.getKey() +
                     ", exchange: " + item.getValue().getKey() + ", exchange letter: " + item.getValue().getValue());
         }
@@ -569,7 +587,7 @@ public final class TWS implements EWrapper {
     //! [newsProviders]
     @Override
     public void newsProviders(NewsProvider[] newsProviders) {
-        for (NewsProvider np : newsProviders) {
+        for(NewsProvider np : newsProviders) {
             System.out.print("News Provider. ProviderCode: " + np.providerCode() + ", ProviderName: " + np.providerName() + "\n");
         }
 
@@ -640,7 +658,7 @@ public final class TWS implements EWrapper {
         DecimalFormat df = new DecimalFormat("#.#");
         df.setMaximumFractionDigits(340);
         System.out.println("Market Rule Id: " + marketRuleId);
-        for (PriceIncrement pi : priceIncrements) {
+        for(PriceIncrement pi : priceIncrements) {
             System.out.println("Price Increment. Low Edge: " + df.format(pi.lowEdge()) + ", Increment: " + df.format(pi.increment()));
         }
     }
@@ -663,7 +681,7 @@ public final class TWS implements EWrapper {
     //! [historicalticks]
     @Override
     public void historicalTicks(int reqId, List<HistoricalTick> ticks, boolean done) {
-        for (HistoricalTick tick : ticks) {
+        for(HistoricalTick tick : ticks) {
             System.out.println(EWrapperMsgGenerator.historicalTick(reqId, tick.time(), tick.price(), tick.size()));
         }
     }
@@ -672,7 +690,7 @@ public final class TWS implements EWrapper {
     //! [historicalticksbidask]
     @Override
     public void historicalTicksBidAsk(int reqId, List<HistoricalTickBidAsk> ticks, boolean done) {
-        for (HistoricalTickBidAsk tick : ticks) {
+        for(HistoricalTickBidAsk tick : ticks) {
             System.out.println(EWrapperMsgGenerator.historicalTickBidAsk(reqId, tick.time(), tick.tickAttribBidAsk(), tick.priceBid(), tick.priceAsk(), tick.sizeBid(),
                     tick.sizeAsk()));
         }
@@ -682,7 +700,7 @@ public final class TWS implements EWrapper {
     @Override
     //! [historicaltickslast]
     public void historicalTicksLast(int reqId, List<HistoricalTickLast> ticks, boolean done) {
-        for (HistoricalTickLast tick : ticks) {
+        for(HistoricalTickLast tick : ticks) {
             System.out.println(EWrapperMsgGenerator.historicalTickLast(reqId, tick.time(), tick.tickAttribLast(), tick.price(), tick.size(), tick.exchange(),
                     tick.specialConditions()));
         }
