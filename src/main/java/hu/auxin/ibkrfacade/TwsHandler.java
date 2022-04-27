@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface TwsHandler {
 
-    void subscribeMarketData(Contract contract);
+    void subscribeMarketData(Contract contract, boolean tickData);
 
     List<Order> getOrders();
 

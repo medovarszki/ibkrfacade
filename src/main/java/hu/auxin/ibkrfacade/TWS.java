@@ -103,7 +103,7 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     @Override
-    public void subscribeMarketData(Contract contract) {
+    public void subscribeMarketData(Contract contract, boolean tickByTick) {
         final int currentId = autoIncrement.getAndIncrement();
         Optional<ContractData> contractDataOptional = contractRepository.findById(contract.conid());
         ContractData contractData = contractDataOptional.orElse(new ContractData(contract));
@@ -114,7 +114,11 @@ public final class TWS implements EWrapper, TwsHandler {
         } catch(JedisDataException e) {
             LOG.error(e.getMessage());
         }
-        client.reqMktData(currentId, contract, "", false, false, null);
+        if(tickByTick) {
+            client.reqTickByTickData(currentId, contract, "BidAsk", 1, false);
+        } else {
+            client.reqMktData(currentId, contract, "", false, false, null);
+        }
     }
 
     @Override
@@ -717,9 +721,9 @@ public final class TWS implements EWrapper, TwsHandler {
 
     //! [tickbytickbidask]
     @Override
-    public void tickByTickBidAsk(int reqId, long time, double bidPrice, double askPrice, int bidSize, int askSize,
-                                 TickAttribBidAsk tickAttribBidAsk) {
-        System.out.println(EWrapperMsgGenerator.tickByTickBidAsk(reqId, time, bidPrice, askPrice, bidSize, askSize, tickAttribBidAsk));
+    public void tickByTickBidAsk(int reqId, long time, double bidPrice, double askPrice, int bidSize, int askSize, TickAttribBidAsk tickAttribBidAsk) {
+        timeSeriesHandler.addToStream(reqId, bidPrice, TickType.BID);
+        timeSeriesHandler.addToStream(reqId, askPrice, TickType.ASK);
     }
     //! [tickbytickbidask]
 

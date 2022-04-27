@@ -7,6 +7,7 @@ import hu.auxin.ibkrfacade.data.PriceData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,8 +36,8 @@ public class WebHandler {
     }
 
     @PostMapping("/subscribe")
-    public Contract subscribeMarketData(@RequestBody Contract contract) {
-        tws.subscribeMarketData(contract);
+    public Contract subscribeMarketData(@RequestBody Contract contract, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
+        tws.subscribeMarketData(contract, tickByTick);
         return contract;
     }
 
