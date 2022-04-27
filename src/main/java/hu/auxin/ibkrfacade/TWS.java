@@ -4,8 +4,8 @@ import com.ib.client.*;
 import hu.auxin.ibkrfacade.data.ContractData;
 import hu.auxin.ibkrfacade.data.OrderData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
-import hu.auxin.ibkrfacade.data.redis.OrderRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.helper.OrderRetriever;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,7 +36,8 @@ public final class TWS implements EWrapper, TwsHandler {
 
     private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
-    private OrderRepository orderRepository;
+
+    private OrderRetriever orderRetriever;
 
     private EReaderSignal readerSignal = new EJavaSignal();
     private EClientSocket client = new EClientSocket(this, readerSignal);
@@ -44,10 +45,8 @@ public final class TWS implements EWrapper, TwsHandler {
     private final Map<Integer, Object> results = new HashMap<>();
 
     TWS(@Autowired ContractRepository contractRepository,
-        @Autowired OrderRepository orderRepository,
         @Autowired TimeSeriesHandler timeSeriesHandler) {
         this.timeSeriesHandler = timeSeriesHandler;
-        this.orderRepository = orderRepository;
         this.contractRepository = contractRepository;
     }
 
@@ -122,8 +121,13 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     @Override
-    public List<Order> getOrders() {
-        return null;
+    public List<OrderData> getOrders() {
+        this.orderRetriever = new OrderRetriever();
+        client.reqAllOpenOrders();
+        while(!orderRetriever.isDone()) {
+            continue;
+        }
+        return orderRetriever.getOrders();
     }
 
 
@@ -208,15 +212,14 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [openorder]
     @Override
     public void openOrder(int orderId, Contract contract, Order order, OrderState orderState) {
-        OrderData orderData = new OrderData(orderId, order, contract, orderState);
-        orderRepository.save(orderData);
+        orderRetriever.addOrder(order, contract, orderState);
     }
     //! [openorder]
 
     //! [openorderend]
     @Override
     public void openOrderEnd() {
-        System.out.println("OpenOrderEnd");
+        orderRetriever.release();
     }
     //! [openorderend]
 

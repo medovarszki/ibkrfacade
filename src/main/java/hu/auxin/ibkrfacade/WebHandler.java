@@ -3,6 +3,7 @@ package hu.auxin.ibkrfacade;
 import com.ib.client.Contract;
 import com.ib.client.Order;
 import hu.auxin.ibkrfacade.data.ContractData;
+import hu.auxin.ibkrfacade.data.OrderData;
 import hu.auxin.ibkrfacade.data.PriceData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
@@ -42,7 +43,7 @@ public class WebHandler {
     }
 
     @GetMapping("/orders")
-    public List<Order> getOrders() {
+    public List<OrderData> getOrders() {
         return tws.getOrders();
     }
 

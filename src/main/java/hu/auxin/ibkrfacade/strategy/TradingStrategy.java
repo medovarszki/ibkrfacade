@@ -26,8 +26,8 @@ public class TradingStrategy {
 
     @Scheduled(fixedRate = 5*1000)
     private void checkTradingSignal() {
-        Optional<ContractData> contractData = contractRepository.findById(265598);
-        int requestId = contractData.orElseThrow(() -> new RuntimeException("No contract found in Redis with conid 265598")).getRequestId();
+//        Optional<ContractData> contractData = contractRepository.findById(265598);
+//        int requestId = contractData.orElseThrow(() -> new RuntimeException("No contract found in Redis with conid 265598")).getRequestId();
 //        double value = timeSeriesHandler.getInstance().get("stream:" + requestId + ":ASK").getValue();
     }
 }

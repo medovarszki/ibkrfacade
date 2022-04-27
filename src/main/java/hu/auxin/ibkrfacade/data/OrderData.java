@@ -14,13 +14,13 @@ public class OrderData {
 
     @Id
     @Getter
-    private Integer orderId;
+    private Integer permId;
 
     @Getter
     private Order order;
 
     @Getter
-    private Contract contract; //TODO conid should be enough
+    private Contract contract;
 
     @Getter
     private OrderState state;
