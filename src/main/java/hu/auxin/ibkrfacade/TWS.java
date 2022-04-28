@@ -2,10 +2,9 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
 import hu.auxin.ibkrfacade.data.ContractData;
-import hu.auxin.ibkrfacade.data.OrderData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
-import hu.auxin.ibkrfacade.helper.OrderRetriever;
+import hu.auxin.ibkrfacade.service.OrderManagerService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +36,7 @@ public final class TWS implements EWrapper, TwsHandler {
     private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
 
-    private OrderRetriever orderRetriever;
+    private OrderManagerService orderManagerService;
 
     private EReaderSignal readerSignal = new EJavaSignal();
     private EClientSocket client = new EClientSocket(this, readerSignal);
@@ -45,8 +44,10 @@ public final class TWS implements EWrapper, TwsHandler {
     private final Map<Integer, Object> results = new HashMap<>();
 
     TWS(@Autowired ContractRepository contractRepository,
-        @Autowired TimeSeriesHandler timeSeriesHandler) {
+        @Autowired TimeSeriesHandler timeSeriesHandler,
+        @Autowired OrderManagerService orderManagerService) {
         this.timeSeriesHandler = timeSeriesHandler;
+        this.orderManagerService = orderManagerService;
         this.contractRepository = contractRepository;
     }
 
@@ -58,7 +59,7 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     public void connect() {
-        client.eConnect(TWS_HOST, TWS_PORT, 2);
+        client.eConnect(TWS_HOST, TWS_PORT, 0);
 
         final EReader reader = new EReader(client, readerSignal);
         reader.start();
@@ -75,7 +76,8 @@ public final class TWS implements EWrapper, TwsHandler {
             }
         }).start();
 
-        client.reqAccountUpdates(true, ACCOUNT);
+        client.reqAutoOpenOrders(true);
+        client.reqAllOpenOrders();
     }
 
     @Override
@@ -120,23 +122,13 @@ public final class TWS implements EWrapper, TwsHandler {
         }
     }
 
-    @Override
-    public List<OrderData> getOrders() {
-        this.orderRetriever = new OrderRetriever();
-        client.reqAllOpenOrders();
-        while(!orderRetriever.isDone()) {
-            continue;
-        }
-        return orderRetriever.getOrders();
-    }
-
 
     //-- TWS callbacks
 
     @Override
     public void connectAck() {
         if(client.isAsyncEConnect()) {
-            System.out.println("Acknowledging connection");
+            LOG.info("Acknowledging connection");
             client.startAPI();
         }
     }
@@ -203,23 +195,24 @@ public final class TWS implements EWrapper, TwsHandler {
     public void orderStatus(int orderId, String status, double filled,
                             double remaining, double avgFillPrice, int permId, int parentId,
                             double lastFillPrice, int clientId, String whyHeld, double mktCapPrice) {
-        System.out.println("OrderStatus. Id: " + orderId + ", Status: " + status + ", Filled" + filled + ", Remaining: " + remaining
-                + ", AvgFillPrice: " + avgFillPrice + ", PermId: " + permId + ", ParentId: " + parentId + ", LastFillPrice: " + lastFillPrice +
-                ", ClientId: " + clientId + ", WhyHeld: " + whyHeld + ", MktCapPrice: " + mktCapPrice);
+        orderManagerService.changeOrderStatus(permId, status);
+//        System.out.println("OrderStatus. Id: " + orderId + ", Status: " + status + ", Filled" + filled + ", Remaining: " + remaining
+//                + ", AvgFillPrice: " + avgFillPrice + ", PermId: " + permId + ", ParentId: " + parentId + ", LastFillPrice: " + lastFillPrice +
+//                ", ClientId: " + clientId + ", WhyHeld: " + whyHeld + ", MktCapPrice: " + mktCapPrice);
     }
     //! [orderstatus]
 
     //! [openorder]
     @Override
     public void openOrder(int orderId, Contract contract, Order order, OrderState orderState) {
-        orderRetriever.addOrder(order, contract, orderState);
+        orderManagerService.setOrder(contract, order, orderState);
     }
     //! [openorder]
 
     //! [openorderend]
     @Override
     public void openOrderEnd() {
-        orderRetriever.release();
+        LOG.info("Order list retrieved");
     }
     //! [openorderend]
 

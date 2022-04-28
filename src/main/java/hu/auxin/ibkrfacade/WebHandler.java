@@ -1,18 +1,19 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.Contract;
-import com.ib.client.Order;
 import hu.auxin.ibkrfacade.data.ContractData;
 import hu.auxin.ibkrfacade.data.OrderData;
 import hu.auxin.ibkrfacade.data.PriceData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.service.OrderManagerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,11 +24,17 @@ public class WebHandler {
 
     private TimeSeriesHandler timeSeriesHandler;
 
+    private OrderManagerService orderManagerService;
+
     private TWS tws;
 
-    WebHandler(@Autowired TWS tws, @Autowired ContractRepository contractRepository, @Autowired TimeSeriesHandler timeSeriesHandler) {
+    WebHandler(@Autowired TWS tws,
+               @Autowired ContractRepository contractRepository,
+               @Autowired OrderManagerService orderManagerService,
+               @Autowired TimeSeriesHandler timeSeriesHandler) {
         this.tws = tws;
         this.contractRepository = contractRepository;
+        this.orderManagerService = orderManagerService;
         this.timeSeriesHandler = timeSeriesHandler;
     }
 
@@ -43,8 +50,13 @@ public class WebHandler {
     }
 
     @GetMapping("/orders")
-    public List<OrderData> getOrders() {
-        return tws.getOrders();
+    public Collection<OrderData> getAllOrders() {
+        return orderManagerService.getAllOrders();
+    }
+
+    @GetMapping("/orders/active")
+    public Collection<OrderData> getActiveOrders() {
+        return orderManagerService.getActiveOrders();
     }
 
     @PostMapping("/lastPrice")
