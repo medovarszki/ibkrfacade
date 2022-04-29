@@ -1,6 +1,6 @@
 package hu.auxin.ibkrfacade.data.redis;
 
-import hu.auxin.ibkrfacade.data.OrderData;
+import hu.auxin.ibkrfacade.data.dto.OrderData;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 

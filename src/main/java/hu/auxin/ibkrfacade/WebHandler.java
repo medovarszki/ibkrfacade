@@ -1,9 +1,10 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.Contract;
-import hu.auxin.ibkrfacade.data.ContractData;
-import hu.auxin.ibkrfacade.data.OrderData;
-import hu.auxin.ibkrfacade.data.PriceData;
+import com.ib.client.Types;
+import hu.auxin.ibkrfacade.data.dto.ContractData;
+import hu.auxin.ibkrfacade.data.dto.OrderData;
+import hu.auxin.ibkrfacade.data.dto.PriceData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
@@ -47,6 +48,12 @@ public class WebHandler {
     public Contract subscribeMarketData(@RequestBody Contract contract, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
         tws.subscribeMarketData(contract, tickByTick);
         return contract;
+    }
+
+    @PostMapping("/order")
+    public void placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
+        Contract contract = contractRepository.findById(conid).get().getContract(); // TODO error handling
+        orderManagerService.placeOrder(contract, Types.Action.valueOf(action), quantity, price);
     }
 
     @GetMapping("/orders")

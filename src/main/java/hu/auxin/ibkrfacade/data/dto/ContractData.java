@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade.data;
+package hu.auxin.ibkrfacade.data.dto;
 
 import com.ib.client.Contract;
 import lombok.Getter;

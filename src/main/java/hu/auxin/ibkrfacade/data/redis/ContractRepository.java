@@ -1,6 +1,6 @@
 package hu.auxin.ibkrfacade.data.redis;
 
-import hu.auxin.ibkrfacade.data.ContractData;
+import hu.auxin.ibkrfacade.data.dto.ContractData;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 

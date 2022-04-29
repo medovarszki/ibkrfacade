@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade.data;
+package hu.auxin.ibkrfacade.data.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
@@ -15,8 +15,6 @@ public class PriceData implements Serializable {
 
     private Double bid;
     private Double ask;
-    private Double lastPrice;
-    private Double volume;
 
     public PriceData(int requestId) {
         this.requestId = requestId;

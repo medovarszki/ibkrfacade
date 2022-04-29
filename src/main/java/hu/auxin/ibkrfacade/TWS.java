@@ -1,7 +1,7 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
-import hu.auxin.ibkrfacade.data.ContractData;
+import hu.auxin.ibkrfacade.data.dto.ContractData;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
@@ -78,6 +78,8 @@ public final class TWS implements EWrapper, TwsHandler {
 
         client.reqAutoOpenOrders(true);
         client.reqAllOpenOrders();
+
+        orderManagerService.setClient(client);
     }
 
     @Override
@@ -195,10 +197,7 @@ public final class TWS implements EWrapper, TwsHandler {
     public void orderStatus(int orderId, String status, double filled,
                             double remaining, double avgFillPrice, int permId, int parentId,
                             double lastFillPrice, int clientId, String whyHeld, double mktCapPrice) {
-        orderManagerService.changeOrderStatus(permId, status);
-//        System.out.println("OrderStatus. Id: " + orderId + ", Status: " + status + ", Filled" + filled + ", Remaining: " + remaining
-//                + ", AvgFillPrice: " + avgFillPrice + ", PermId: " + permId + ", ParentId: " + parentId + ", LastFillPrice: " + lastFillPrice +
-//                ", ClientId: " + clientId + ", WhyHeld: " + whyHeld + ", MktCapPrice: " + mktCapPrice);
+        orderManagerService.changeOrderStatus(permId, status, filled, remaining, avgFillPrice, lastFillPrice);
     }
     //! [orderstatus]
 
