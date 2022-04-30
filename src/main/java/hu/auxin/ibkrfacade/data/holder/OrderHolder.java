@@ -1,27 +1,22 @@
-package hu.auxin.ibkrfacade.data.dto;
+package hu.auxin.ibkrfacade.data.holder;
 
 import com.ib.client.Contract;
 import com.ib.client.Order;
 import com.ib.client.OrderState;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
+import lombok.Data;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.redis.core.RedisHash;
 
+@Data
 @AllArgsConstructor
-@RedisHash("order")
-public class OrderData {
+public class OrderHolder {
 
     @Id
-    @Getter
     private Integer permId;
 
-    @Getter
     private Order order;
 
-    @Getter
     private Contract contract;
 
-    @Getter
-    private OrderState state;
+    private OrderState orderState;
 }

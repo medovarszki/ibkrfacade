@@ -1,7 +1,7 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
-import hu.auxin.ibkrfacade.data.dto.ContractData;
+import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
@@ -108,10 +108,10 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public void subscribeMarketData(Contract contract, boolean tickByTick) {
         final int currentId = autoIncrement.getAndIncrement();
-        Optional<ContractData> contractDataOptional = contractRepository.findById(contract.conid());
-        ContractData contractData = contractDataOptional.orElse(new ContractData(contract));
-        contractData.setRequestId(currentId);
-        contractRepository.save(contractData);
+        Optional<ContractHolder> contractHolderOptional = contractRepository.findById(contract.conid());
+        ContractHolder contractHolder = contractHolderOptional.orElse(new ContractHolder(contract));
+        contractHolder.setStreamRequestId(currentId);
+        contractRepository.save(contractHolder);
         try {
             timeSeriesHandler.createStream(currentId, contract);
         } catch(JedisDataException e) {

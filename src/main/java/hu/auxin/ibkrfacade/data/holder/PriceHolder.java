@@ -1,4 +1,4 @@
-package hu.auxin.ibkrfacade.data.dto;
+package hu.auxin.ibkrfacade.data.holder;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
@@ -7,7 +7,7 @@ import org.springframework.data.annotation.Id;
 import java.io.Serializable;
 
 @Data
-public class PriceData implements Serializable {
+public class PriceHolder implements Serializable {
 
     @Id
     @JsonIgnore
@@ -16,11 +16,11 @@ public class PriceData implements Serializable {
     private Double bid;
     private Double ask;
 
-    public PriceData(int requestId) {
+    public PriceHolder(int requestId) {
         this.requestId = requestId;
     }
 
-    public PriceData(double bid, double ask) {
+    public PriceHolder(double bid, double ask) {
         this.bid = bid;
         this.ask = ask;
     }

@@ -3,7 +3,7 @@ package hu.auxin.ibkrfacade.data.redis;
 import com.ib.client.Contract;
 import com.ib.client.TickType;
 import com.redislabs.redistimeseries.RedisTimeSeries;
-import hu.auxin.ibkrfacade.data.dto.PriceData;
+import hu.auxin.ibkrfacade.data.holder.PriceHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
@@ -38,10 +38,10 @@ public class TimeSeriesHandler {
         return rts.add("stream:" + tickerId + ":" + tickType.name(), value);
     }
 
-    public PriceData getLatestPrice(int tickerId) {
+    public PriceHolder getLatestPrice(int tickerId) {
         double bid = rts.get("stream:" + tickerId + ":" + TickType.BID.name()).getValue();
         double ask = rts.get("stream:" + tickerId + ":" + TickType.ASK.name()).getValue();
-        return new PriceData(bid, ask);
+        return new PriceHolder(bid, ask);
     }
 
 }

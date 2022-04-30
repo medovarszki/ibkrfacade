@@ -1,7 +1,7 @@
 package hu.auxin.ibkrfacade.service;
 
 import com.ib.client.*;
-import hu.auxin.ibkrfacade.data.dto.OrderData;
+import hu.auxin.ibkrfacade.data.holder.OrderHolder;
 import hu.auxin.ibkrfacade.twssample.OrderSamples;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,9 +20,9 @@ public class OrderManagerService {
 
     private static final Logger LOG = LogManager.getLogger(OrderManagerService.class);
 
-    int orderId = 100;
+    int orderId = 100; //TODO nextOrderId?
 
-    private Map<Integer, OrderData> orders = new HashMap<>();
+    private Map<Integer, OrderHolder> orders = new HashMap<>();
 
     @NonNull
     private EClientSocket client;
@@ -47,7 +47,7 @@ public class OrderManagerService {
      * @param orderState
      */
     public void setOrder(Contract contract, Order order, OrderState orderState) {
-        orders.put(order.permId(), new OrderData(order.permId(), order, contract, orderState));
+        orders.put(order.permId(), new OrderHolder(order.permId(), order, contract, orderState));
     }
 
     /**
@@ -60,21 +60,36 @@ public class OrderManagerService {
      * @param lastFillPrice
      */
     public void changeOrderStatus(int permId, String status, double filled, double remaining, double avgFillPrice, double lastFillPrice) {
-        OrderData orderData = orders.get(permId);
-        if(orderData != null) {
-            orderData.getState().status(status);
-            orderData.getOrder().filledQuantity(filled);
+        OrderHolder orderHolder = orders.get(permId);
+        if(orderHolder != null) {
+            orderHolder.getOrderState().status(status);
+            orderHolder.getOrder().filledQuantity(filled);
         } else {
-            throw new RuntimeException("OrderData empty for permId=" + permId);
+            throw new RuntimeException("Order empty for permId=" + permId);
         }
     }
 
-    public Collection<OrderData> getAllOrders() {
+    public Collection<OrderHolder> getAllOrders() {
         return orders.values();
     }
 
-    public Collection<OrderData> getActiveOrders() {
-        return orders.values().stream().filter(orderData -> orderData.getState().status().isActive()).collect(Collectors.toList());
+    public Collection<OrderHolder> getActiveOrders() {
+        return orders.values().stream()
+                .filter(orderHolder -> orderHolder.getOrderState().status().isActive())
+                .collect(Collectors.toList());
+    }
+
+    public Collection<OrderHolder> getAllOrdersByContract(Contract contract) {
+        return orders.values().stream()
+                .filter(orderHolder -> orderHolder.getContract().conid() == contract.conid())
+                .collect(Collectors.toList());
+    }
+
+    public Collection<OrderHolder> getActiveOrdersByContract(Contract contract) {
+        return orders.values().stream()
+                .filter(orderHolder -> orderHolder.getContract().conid() == contract.conid())
+                .filter(orderHolder -> orderHolder.getOrderState().status().isActive())
+                .collect(Collectors.toList());
     }
 
     public void setClient(EClientSocket client) {
