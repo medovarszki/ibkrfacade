@@ -5,7 +5,6 @@ import com.ib.client.TickType;
 import com.ib.client.Types;
 import com.redislabs.redistimeseries.Value;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
-import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
@@ -19,7 +18,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.text.DecimalFormat;
 import java.util.Date;
+import java.util.Optional;
 
 /**
  * For testing purpose ONLY!
@@ -28,17 +29,18 @@ import java.util.Date;
 @Scope("singleton")
 public class TrendTradingStrategy {
 
+    private boolean active = false;
     private static final Logger LOG = LogManager.getLogger(TrendTradingStrategy.class);
 
     private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
     private OrderManagerService orderManagerService;
 
-    private PositionHolder positionHolder;
-
     private String redisKey;
     private int conid = 265598;  //AAPL
     private Contract apple;
+
+    private DecimalFormat df = new DecimalFormat("0.00000000");
 
     public TrendTradingStrategy(@Autowired OrderManagerService orderManagerService,
                                 @Autowired TimeSeriesHandler timeSeriesHandler,
@@ -50,37 +52,49 @@ public class TrendTradingStrategy {
 
     @PostConstruct
     private void init() {
-        ContractHolder contractHolder = contractRepository.findById(265598).orElseThrow(() -> new RuntimeException("No contract found in Redis with conid " + conid));
-        if(contractHolder != null) {
-            this.apple = contractHolder.getContract();
-            redisKey = "stream:" + contractHolder.getStreamRequestId();
-        } else {
-            redisKey = "stream:0"; //TODO
-        }
     }
 
     @Scheduled(fixedRate = 5*1000, initialDelay = 10000)
     private synchronized void checkForTradingSignal() {
-        if(positionHolder != null) {
-            LOG.info("Currently we have an open position");
+        if(!active) {
+            Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
+            if(contractHolder.isPresent()) {
+                apple = contractHolder.get().getContract();
+                redisKey = "stream:" + contractHolder.get().getStreamRequestId();
+                active = true; //if we have a stream, set it to true
+            }
+            return;
+        }
+        if(orderManagerService.getActiveOrders() != null) {
+            LOG.info("Currently we have an open position"); //TODO manage position
         } else {
             long now = new Date().getTime();
+
             Value[] bidArray = timeSeriesHandler.getInstance().range(redisKey + ":" + TickType.BID, now - (5 * 60 * 1000), now);
-            int i = 0;
-            double[] prices = new double[bidArray.length];
-            SimpleRegression regression = new SimpleRegression();
-            for(Value current : bidArray) {
-                regression.addData(current.getTime(), current.getValue());
-                prices[i++] = current.getValue();
-            }
 
-            double slope = regression.getSlope();
-            double variance = new Variance().evaluate(prices);
+            if(bidArray.length > 50) { //we have at least 50 price data
+                double lastPrice = bidArray[bidArray.length].getValue();
+                double[] prices = new double[bidArray.length];
 
-            if(slope > 1 && variance < 0.2) {
-                double lastPrice = prices[prices.length];
-                LOG.info("BUY SIGNAL (Slope is: {}; Variance: {}; last price: {})", slope, variance, lastPrice);
-                orderManagerService.placeOrder(apple, Types.Action.BUY, 1, lastPrice);
+                SimpleRegression regression = new SimpleRegression();
+
+                int i = 0;
+                for(Value current : bidArray) {
+                    regression.addData(current.getTime(), current.getValue());
+                    prices[i++] = current.getValue();
+                }
+
+                double slope = regression.getSlope();
+                double variance = new Variance().evaluate(prices);
+
+                LOG.info("Slope is: {}; Variance: {}; last price: {})", df.format(slope), df.format(variance), lastPrice);
+
+                if(slope > 0.5 && variance < 0.03) { //TODO finding working parameters
+                    LOG.info("BUY SIGNAL! - Last price: {}", lastPrice);
+                    orderManagerService.placeOrder(apple, Types.Action.BUY, 10, lastPrice);
+                }
+            } else {
+                LOG.warn("No data points");
             }
         }
     }
