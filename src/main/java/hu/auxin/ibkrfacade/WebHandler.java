@@ -4,10 +4,12 @@ import com.ib.client.Contract;
 import com.ib.client.Types;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.OrderHolder;
+import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.data.holder.PriceHolder;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
+import hu.auxin.ibkrfacade.service.PositionManagerService;
 import hu.auxin.ibkrfacade.twssample.ContractSamples;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,15 +33,19 @@ public class WebHandler {
 
     private OrderManagerService orderManagerService;
 
+    private PositionManagerService positionManagerService;
+
     private TWS tws;
 
     WebHandler(@Autowired TWS tws,
                @Autowired ContractRepository contractRepository,
                @Autowired OrderManagerService orderManagerService,
+               @Autowired PositionManagerService positionManagerService,
                @Autowired TimeSeriesHandler timeSeriesHandler) {
         this.tws = tws;
         this.contractRepository = contractRepository;
         this.orderManagerService = orderManagerService;
+        this.positionManagerService = positionManagerService;
         this.timeSeriesHandler = timeSeriesHandler;
     }
 
@@ -78,6 +84,11 @@ public class WebHandler {
     @GetMapping("/orders/active")
     public Collection<OrderHolder> getActiveOrders() {
         return orderManagerService.getActiveOrders();
+    }
+
+    @GetMapping("/positions")
+    public Collection<PositionHolder> getPositions() {
+        return positionManagerService.getPositions();
     }
 
     @PostMapping("/lastPrice")

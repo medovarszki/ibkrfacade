@@ -1,17 +1,16 @@
 package hu.auxin.ibkrfacade.data.holder;
 
+import com.ib.client.Contract;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data
+@AllArgsConstructor
 public class PositionHolder {
 
-    private ContractHolder contractHolder;
+    private Contract contract;
 
-    private OrderHolder openOrder;
+    private double quantity;
 
-    private OrderHolder closeOrder;
-
-    private double openPrice;
-
-    private double closePrice;
+    private double avgPrice;
 }

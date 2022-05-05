@@ -2,9 +2,11 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
+import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.data.redis.ContractRepository;
 import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
+import hu.auxin.ibkrfacade.service.PositionManagerService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,8 +37,8 @@ public final class TWS implements EWrapper, TwsHandler {
 
     private TimeSeriesHandler timeSeriesHandler;
     private ContractRepository contractRepository;
-
     private OrderManagerService orderManagerService;
+    private PositionManagerService positionManagerService;
 
     private EReaderSignal readerSignal = new EJavaSignal();
     private EClientSocket client = new EClientSocket(this, readerSignal);
@@ -45,9 +47,11 @@ public final class TWS implements EWrapper, TwsHandler {
 
     TWS(@Autowired ContractRepository contractRepository,
         @Autowired TimeSeriesHandler timeSeriesHandler,
-        @Autowired OrderManagerService orderManagerService) {
+        @Autowired OrderManagerService orderManagerService,
+        @Autowired PositionManagerService positionManagerService) {
         this.timeSeriesHandler = timeSeriesHandler;
         this.orderManagerService = orderManagerService;
+        this.positionManagerService = positionManagerService;
         this.contractRepository = contractRepository;
     }
 
@@ -76,8 +80,9 @@ public final class TWS implements EWrapper, TwsHandler {
             }
         }).start();
 
-        client.reqAutoOpenOrders(true);
-        client.reqAllOpenOrders();
+        client.reqPositions(); // subscribe to positions
+        client.reqAutoOpenOrders(true); // subscribe to order changes
+        client.reqAllOpenOrders(); // initial request for open orders
 
         orderManagerService.setClient(client);
     }
@@ -411,14 +416,14 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [position]
     @Override
     public void position(String account, Contract contract, double pos, double avgCost) {
-        System.out.println("Position. " + account + " - Symbol: " + contract.symbol() + ", SecType: " + contract.secType() + ", Currency: " + contract.currency() + ", Position: " + pos + ", Avg cost: " + avgCost);
+        positionManagerService.addPosition(new PositionHolder(contract, pos, avgCost));
     }
     //! [position]
 
     //! [positionend]
     @Override
     public void positionEnd() {
-        System.out.println("PositionEnd \n");
+        LOG.info("Position list retrieved");
     }
     //! [positionend]
 

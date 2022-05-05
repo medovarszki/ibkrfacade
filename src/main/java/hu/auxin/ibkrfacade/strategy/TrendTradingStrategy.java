@@ -91,7 +91,7 @@ public class TrendTradingStrategy {
 
                 if(slope > 0.5 && variance < 0.03) { //TODO finding working parameters
                     LOG.info("BUY SIGNAL! - Last price: {}", lastPrice);
-                    orderManagerService.placeOrder(apple, Types.Action.BUY, 10, lastPrice);
+//                    orderManagerService.placeOrder(apple, Types.Action.BUY, 10, lastPrice);
                 }
             } else {
                 LOG.warn("No data points");
