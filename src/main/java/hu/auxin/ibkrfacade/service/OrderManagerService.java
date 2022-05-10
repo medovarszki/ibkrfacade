@@ -28,15 +28,30 @@ public class OrderManagerService {
     private EClientSocket client;
 
     /**
-     * Placing an order on the market
+     * Place an order on the market for a Contract
+     *
+     * @param contract
+     * @param order
+     */
+    public void placeOrder(Contract contract, Order order) {
+        client.placeOrder(orderId++, contract, order);
+    }
+
+    /**
+     * Placing a limit order on the market
      *
      * @param contract
      * @param action
      * @param quantity
-     * @param price
+     * @param limitPrice
      */
-    public void placeOrder(Contract contract, Types.Action action, double quantity, double price) {
-        Order order = OrderSamples.LimitOrder(action.getApiString(), quantity, price);
+    public void placeLimitOrder(Contract contract, Types.Action action, double quantity, double limitPrice) {
+        Order order = OrderSamples.LimitOrder(action.getApiString(), quantity, limitPrice);
+        client.placeOrder(orderId++, contract, order);
+    }
+
+    public void placeStopLimitOrder(Contract contract, Types.Action action, double quantity, double stopPrice, double limitPrice) {
+        Order order = OrderSamples.StopLimit(action.getApiString(), quantity, limitPrice, stopPrice);
         client.placeOrder(orderId++, contract, order);
     }
 

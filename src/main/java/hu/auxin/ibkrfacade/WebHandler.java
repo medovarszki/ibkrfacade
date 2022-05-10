@@ -2,24 +2,21 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.Contract;
 import com.ib.client.Types;
-import hu.auxin.ibkrfacade.data.holder.ContractHolder;
+import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.holder.OrderHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.data.holder.PriceHolder;
-import hu.auxin.ibkrfacade.data.redis.ContractRepository;
-import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
+import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
 import hu.auxin.ibkrfacade.twssample.ContractSamples;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpServletResponse;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Web endpoints for accessing the functions
@@ -28,44 +25,37 @@ import java.util.Optional;
 public class WebHandler {
 
     private ContractRepository contractRepository;
-
-    private TimeSeriesHandler timeSeriesHandler;
-
+    private ContractManagerService contractManagerService;
     private OrderManagerService orderManagerService;
-
     private PositionManagerService positionManagerService;
 
-    private TWS tws;
-
-    WebHandler(@Autowired TWS tws,
-               @Autowired ContractRepository contractRepository,
+    WebHandler(@Autowired ContractRepository contractRepository,
+               @Autowired ContractManagerService contractManagerService,
                @Autowired OrderManagerService orderManagerService,
-               @Autowired PositionManagerService positionManagerService,
-               @Autowired TimeSeriesHandler timeSeriesHandler) {
-        this.tws = tws;
+               @Autowired PositionManagerService positionManagerService) {
         this.contractRepository = contractRepository;
+        this.contractManagerService = contractManagerService;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
-        this.timeSeriesHandler = timeSeriesHandler;
     }
 
     @GetMapping("/search")
     public List<Contract> searchContract(@RequestParam String query) {
-        return tws.searchContract(query);
+        return contractManagerService.searchContract(query);
     }
 
     @GetMapping("/subscribe")
-    public Contract subscribeMarketDataByConid(@RequestParam int conid, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
+    public ResponseEntity subscribeMarketDataByConid(@RequestParam int conid, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
         Contract contract = ContractSamples.ByConId();
         contract.conid(conid);
-        tws.subscribeMarketData(contract, tickByTick);
-        return contract;
+        contractManagerService.subscribeMarketData(contract, tickByTick);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/subscribe")
-    public Contract subscribeMarketDataByContract(@RequestBody Contract contract, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
-        tws.subscribeMarketData(contract, tickByTick);
-        return contract;
+    public ResponseEntity subscribeMarketDataByContract(@RequestBody Contract contract, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
+        contractManagerService.subscribeMarketData(contract, tickByTick);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping("/order")
@@ -73,7 +63,7 @@ public class WebHandler {
         Contract contract = contractRepository.findById(conid)
                 .orElseThrow(() -> new IllegalArgumentException("Contract not found in Redis with conid " + conid))
                 .getContract();
-        orderManagerService.placeOrder(contract, Types.Action.valueOf(action), quantity, price);
+        orderManagerService.placeLimitOrder(contract, Types.Action.valueOf(action), quantity, price);
     }
 
     @GetMapping("/orders")
@@ -87,17 +77,12 @@ public class WebHandler {
     }
 
     @GetMapping("/positions")
-    public Collection<PositionHolder> getPositions() {
-        return positionManagerService.getPositions();
+    public Collection<PositionHolder> getAllPositions() {
+        return positionManagerService.getAllPositions();
     }
 
     @PostMapping("/lastPrice")
-    public PriceHolder getLastPrice(@RequestBody Contract contract, HttpServletResponse res) {
-        Optional<ContractHolder> contractHolder = contractRepository.findById(contract.conid());
-        if(contractHolder.isPresent()) {
-            return timeSeriesHandler.getLatestPrice(contractHolder.get().getStreamRequestId());
-        }
-        res.setStatus(HttpStatus.NOT_FOUND.value());
-        return null;
+    public PriceHolder getLastPrice(@RequestBody Contract contract) {
+        return contractManagerService.getLastPriceByContract(contract);
     }
 }

@@ -1,14 +1,15 @@
 package hu.auxin.ibkrfacade.service;
 
-import com.ib.client.EClientSocket;
+import com.ib.client.Contract;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.context.annotation.Scope;
-import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @Scope("singleton")
@@ -18,9 +19,6 @@ public class PositionManagerService {
 
     private Map<Integer, PositionHolder> positions = new HashMap<>();
 
-    @NonNull
-    private EClientSocket client;
-
     public void addPosition(PositionHolder positionHolder) {
         if(positionHolder.getQuantity() == 0) {
             positions.remove(positionHolder.getContract().conid());
@@ -29,11 +27,15 @@ public class PositionManagerService {
         }
     }
 
-    public Collection<PositionHolder> getPositions() {
+    public Collection<PositionHolder> getAllPositions() {
         return positions.values();
     }
 
-    public void setClient(EClientSocket client) {
-        this.client = client;
+    public PositionHolder getPositionByContract(Contract contract) {
+        return positions.get(contract.conid());
+    }
+
+    public PositionHolder getPositionByConid(int conid) {
+        return positions.get(conid);
     }
 }

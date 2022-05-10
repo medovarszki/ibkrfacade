@@ -1,10 +1,10 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
+import hu.auxin.ibkrfacade.data.ContractRepository;
+import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
-import hu.auxin.ibkrfacade.data.redis.ContractRepository;
-import hu.auxin.ibkrfacade.data.redis.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
 import org.apache.logging.log4j.LogManager;
@@ -35,14 +35,14 @@ public final class TWS implements EWrapper, TwsHandler {
     @Value("${ibkr.tws.account}")
     private String ACCOUNT;
 
-    private TimeSeriesHandler timeSeriesHandler;
-    private ContractRepository contractRepository;
-    private OrderManagerService orderManagerService;
-    private PositionManagerService positionManagerService;
+    private final TimeSeriesHandler timeSeriesHandler;
+    private final ContractRepository contractRepository;
+    private final OrderManagerService orderManagerService;
+    private final PositionManagerService positionManagerService;
 
-    private EReaderSignal readerSignal = new EJavaSignal();
-    private EClientSocket client = new EClientSocket(this, readerSignal);
-    private static AtomicInteger autoIncrement = new AtomicInteger();
+    private final EReaderSignal readerSignal = new EJavaSignal();
+    private final EClientSocket client = new EClientSocket(this, readerSignal);
+    private final AtomicInteger autoIncrement = new AtomicInteger();
     private final Map<Integer, Object> results = new HashMap<>();
 
     TWS(@Autowired ContractRepository contractRepository,
@@ -102,8 +102,15 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     @Override
+    public Contract getContractByConid(int conid) {
+        Contract contract = new Contract();
+        contract.conid(conid);
+        ContractDetails contractDetails = requestContractDetails(contract);
+        return contractDetails.contract();
+    }
+
+    @Override
     public ContractDetails requestContractDetails(Contract contract) {
-        LOG.debug("Request contract details: {}", contract);
         int i = autoIncrement.getAndIncrement();
         client.reqContractDetails(i, contract);
         waitForResult(i);
@@ -262,7 +269,7 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [contractdetails]
     @Override
     public void contractDetails(int reqId, ContractDetails contractDetails) {
-        System.out.println(EWrapperMsgGenerator.contractDetails(reqId, contractDetails));
+        results.put(reqId, contractDetails);
     }
 
     //! [contractdetails]
