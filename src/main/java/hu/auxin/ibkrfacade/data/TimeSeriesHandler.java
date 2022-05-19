@@ -28,9 +28,14 @@ public class TimeSeriesHandler {
         return rts;
     }
 
-    public void createStream(int key, Contract contract) {
-        rts.create("stream:" + key + ":BID", DEFAULT_RETENTION, Map.of("side", TickType.BID.name(), "conid", String.valueOf(contract.conid())));
-        rts.create("stream:" + key + ":ASK", DEFAULT_RETENTION, Map.of("side", TickType.ASK.name(), "conid", String.valueOf(contract.conid())));
+    /**
+     * Creates two different timeseries in Redis. One is for the ask and one is for the bid prices. Both series are labeled with the conid of the Contract
+     * @param streamRequestId
+     * @param contract
+     */
+    public void createStream(int streamRequestId, Contract contract) {
+        rts.create("stream:" + streamRequestId + ":BID", DEFAULT_RETENTION, Map.of("side", TickType.BID.name(), "conid", Integer.toString(contract.conid())));
+        rts.create("stream:" + streamRequestId + ":ASK", DEFAULT_RETENTION, Map.of("side", TickType.ASK.name(), "conid", Integer.toString(contract.conid())));
     }
 
     public long addToStream(int tickerId, double value, TickType tickType) {

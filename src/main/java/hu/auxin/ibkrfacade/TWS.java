@@ -7,8 +7,7 @@ import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
@@ -20,11 +19,10 @@ import java.text.DecimalFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Slf4j
 @Component
 @Scope("singleton")
 public final class TWS implements EWrapper, TwsHandler {
-
-    private static final Logger LOG = LogManager.getLogger(TWS.class);
 
     @Value("${ibkr.tws.host}")
     private String TWS_HOST;
@@ -75,7 +73,7 @@ public final class TWS implements EWrapper, TwsHandler {
                 try {
                     reader.processMsgs();
                 } catch(Exception e) {
-                    LOG.error(e);
+                    log.error(e.getMessage());
                 }
             }
         }).start();
@@ -90,7 +88,7 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public List<Contract> searchContract(String search) {
         if(StringUtils.hasLength(search)) {
-            LOG.debug("Searching for contracts: {}", search);
+            log.debug("Searching for contracts: {}", search);
             int i = autoIncrement.getAndIncrement();
             client.reqMatchingSymbols(i, search);
             waitForResult(i); //TODO using async redis for wait for result
@@ -127,7 +125,7 @@ public final class TWS implements EWrapper, TwsHandler {
         try {
             timeSeriesHandler.createStream(currentId, contract);
         } catch(JedisDataException e) {
-            LOG.error(e.getMessage());
+            log.error(e.getMessage());
         }
         if(tickByTick) {
             client.reqTickByTickData(currentId, contract, "BidAsk", 1, false);
@@ -142,7 +140,7 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public void connectAck() {
         if(client.isAsyncEConnect()) {
-            LOG.info("Acknowledging connection");
+            log.info("Acknowledging connection");
             client.startAPI();
         }
     }
@@ -153,9 +151,9 @@ public final class TWS implements EWrapper, TwsHandler {
         TickType tickType = TickType.get(field);
         if(Set.of(TickType.ASK, TickType.BID).contains(tickType)) {
             timeSeriesHandler.addToStream(tickerId, price, tickType);
-            LOG.debug("Tick added to stream {}: {}", tickType, price);
+            log.debug("Tick added to stream {}: {}", tickType, price);
         } else {
-            LOG.debug("Skip tick type {}", tickType);
+            log.debug("Skip tick type {}", tickType);
         }
     }
     //! [tickprice]
@@ -223,7 +221,7 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [openorderend]
     @Override
     public void openOrderEnd() {
-        LOG.info("Order list retrieved");
+        log.info("Order list retrieved");
     }
     //! [openorderend]
 
@@ -262,7 +260,7 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [nextvalidid]
     @Override
     public void nextValidId(int orderId) {
-        System.out.println("Next Valid Id: [" + orderId + "]");
+        this.orderManagerService.setOrderId(orderId);
     }
     //! [nextvalidid]
 
@@ -430,7 +428,7 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [positionend]
     @Override
     public void positionEnd() {
-        LOG.info("Position list retrieved");
+        log.info("Position list retrieved");
     }
     //! [positionend]
 
@@ -766,24 +764,24 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [displaygroupupdated]
     @Override
     public void error(Exception e) {
-        LOG.error(e);
+        log.error(e.getMessage());
     }
 
     @Override
     public void error(String str) {
-        LOG.error(str);
+        log.error(str);
     }
 
     //! [error]
     @Override
     public void error(int id, int errorCode, String errorMsg) {
-        LOG.error("Error id: {}; Code: {}: {}", id, errorCode, errorMsg);
+        log.error("Error id: {}; Code: {}: {}", id, errorCode, errorMsg);
     }
 
     //! [error]
     @Override
     public void connectionClosed() {
-        LOG.info("Connection closed");
+        log.info("Connection closed");
     }
 
 }

@@ -40,7 +40,7 @@ public class RedisConfiguration {
     }
 
     @Bean
-    public RedisProperties redisProperties() {
+    RedisProperties redisProperties() {
         return new RedisProperties();
     }
 

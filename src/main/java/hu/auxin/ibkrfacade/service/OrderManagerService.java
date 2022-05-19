@@ -3,8 +3,6 @@ package hu.auxin.ibkrfacade.service;
 import com.ib.client.*;
 import hu.auxin.ibkrfacade.data.holder.OrderHolder;
 import hu.auxin.ibkrfacade.twssample.OrderSamples;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.springframework.context.annotation.Scope;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
@@ -18,9 +16,7 @@ import java.util.stream.Collectors;
 @Scope("singleton")
 public class OrderManagerService {
 
-    private static final Logger LOG = LogManager.getLogger(OrderManagerService.class);
-
-    int orderId = 100; //TODO nextOrderId?
+    private int orderId = 100;
 
     private Map<Integer, OrderHolder> orders = new HashMap<>();
 
@@ -37,16 +33,13 @@ public class OrderManagerService {
         client.placeOrder(orderId++, contract, order);
     }
 
-    /**
-     * Placing a limit order on the market
-     *
-     * @param contract
-     * @param action
-     * @param quantity
-     * @param limitPrice
-     */
     public void placeLimitOrder(Contract contract, Types.Action action, double quantity, double limitPrice) {
         Order order = OrderSamples.LimitOrder(action.getApiString(), quantity, limitPrice);
+        client.placeOrder(orderId++, contract, order);
+    }
+
+    public void placeMarketOrder(Contract contract, Types.Action action, double quantity) {
+        Order order = OrderSamples.MarketOrder(action.getApiString(), quantity);
         client.placeOrder(orderId++, contract, order);
     }
 
@@ -57,6 +50,7 @@ public class OrderManagerService {
 
     /**
      * Order created, get from IB and store
+     *
      * @param contract
      * @param order
      * @param orderState
@@ -67,6 +61,7 @@ public class OrderManagerService {
 
     /**
      * Order status changed
+     *
      * @param permId
      * @param status
      * @param filled
@@ -105,6 +100,10 @@ public class OrderManagerService {
                 .filter(orderHolder -> orderHolder.getContract().conid() == contract.conid())
                 .filter(orderHolder -> orderHolder.getOrderState().status().isActive())
                 .collect(Collectors.toList());
+    }
+
+    public void setOrderId(int orderId) {
+        this.orderId = orderId;
     }
 
     public void setClient(EClientSocket client) {

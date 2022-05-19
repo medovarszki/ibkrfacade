@@ -16,10 +16,6 @@ public class PriceHolder implements Serializable {
     private Double bid;
     private Double ask;
 
-    public PriceHolder(int requestId) {
-        this.requestId = requestId;
-    }
-
     public PriceHolder(double bid, double ask) {
         this.bid = bid;
         this.ask = ask;
