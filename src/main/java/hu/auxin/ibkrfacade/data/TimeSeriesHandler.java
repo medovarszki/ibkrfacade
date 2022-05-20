@@ -11,12 +11,21 @@ import org.springframework.util.StringUtils;
 
 import java.util.Map;
 
+/**
+ * Proxy class for handling the time series data stored in Redis. You can use either the methods of this,
+ * or just get the RedisTimeSeries instance itself by getInstance().
+ *
+ * @see <a href="https://github.com/RedisTimeSeries/JRedisTimeSeries">JRedisTimeSeries</a>
+ */
 @Component
 public class TimeSeriesHandler {
 
     @Value("${redis.default-retention}")
     private int DEFAULT_RETENTION;
 
+    /**
+     * Redis Time Series handler class from JRedisTimeSeries. You can access it from anywhere via getInstance()
+     */
     private RedisTimeSeries rts;
 
     public TimeSeriesHandler(@Autowired RedisProperties redisProperties) {
@@ -24,12 +33,19 @@ public class TimeSeriesHandler {
         this.rts = new RedisTimeSeries(redisProperties.getHost(), redisProperties.getPort(), redisProperties.getTimeout().toMillisPart(), 3, password);
     }
 
+    /**
+     * Access the JRedisTimeSeries instance itself.
+     *
+     * @return RedisTimeSeries instance
+     */
     public RedisTimeSeries getInstance() {
         return rts;
     }
 
     /**
-     * Creates two different timeseries in Redis. One is for the ask and one is for the bid prices. Both series are labeled with the conid of the Contract
+     * Creates two different timeseries in Redis. One is for the ask and one is for the bid prices.
+     * Both series are labeled with the conid of the Contract
+     *
      * @param streamRequestId
      * @param contract
      */
@@ -38,8 +54,16 @@ public class TimeSeriesHandler {
         rts.create("stream:" + streamRequestId + ":ASK", DEFAULT_RETENTION, Map.of("side", TickType.ASK.name(), "conid", Integer.toString(contract.conid())));
     }
 
-    public long addToStream(int tickerId, double value, TickType tickType) {
-        return rts.add("stream:" + tickerId + ":" + tickType.name(), value);
+    /**
+     * Adds a new data point to the time series stored in Redis
+     *
+     * @param streamRequestId is the key parameter which identifies the data stream in TWS.
+     * @param value price
+     * @param tickType BID/ASK
+     * @return
+     */
+    public long addToStream(int streamRequestId, double value, TickType tickType) {
+        return rts.add("stream:" + streamRequestId + ":" + tickType.name(), value);
     }
 
 }

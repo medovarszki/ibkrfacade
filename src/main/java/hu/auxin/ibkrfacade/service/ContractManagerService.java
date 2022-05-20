@@ -46,28 +46,28 @@ public class ContractManagerService {
         tws.subscribeMarketData(contract, tickByTick);
     }
 
+    /**
+     * Returns the latest available ask and bid price for the given conid
+     * @param conid
+     * @return
+     */
     public PriceHolder getLastPriceByConid(int conid) {
         ContractHolder contractHolder = contractRepository.findById(conid).orElseThrow(() -> new RuntimeException("No conid found"));
         return getLastPriceByContractHolder(contractHolder);
     }
 
+    /**
+     * Returns the latest available ask and bid price for the given Contract
+     * @param contract
+     * @return
+     */
     public PriceHolder getLastPriceByContract(Contract contract) {
         ContractHolder contractHolder = contractRepository.findById(contract.conid()).orElseThrow(() -> new RuntimeException("No Contract found"));
         return getLastPriceByContractHolder(contractHolder);
     }
 
     /**
-     * Returns the latest available ask and bid price for the given contract
-     * @param contract
-     * @return
-     */
-    public PriceHolder getLastPriceByContractHolder(Contract contract) {
-        ContractHolder contractHolder = contractRepository.findById(contract.conid()).orElseThrow(() -> new RuntimeException("No Contract found"));
-        return getLastPriceByContractHolder(contractHolder);
-    }
-
-    /**
-     * Returns the latest available ask and bid price for the given contract
+     * Returns the latest available ask and bid price for the given ContractHolder
      * @param contractHolder
      * @return
      */

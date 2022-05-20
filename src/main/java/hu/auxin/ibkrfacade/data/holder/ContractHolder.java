@@ -11,9 +11,15 @@ import java.io.Serializable;
 @Data
 public class ContractHolder implements Serializable {
 
+    /**
+     * The internal unique identifier of every Contract can be accessed on Interactive Brokers
+     */
     @Id
     private int conid;
 
+    /**
+     * The Contract descriptor itself
+     */
     private Contract contract;
 
     /**

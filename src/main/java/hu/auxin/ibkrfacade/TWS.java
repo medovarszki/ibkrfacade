@@ -30,9 +30,6 @@ public final class TWS implements EWrapper, TwsHandler {
     @Value("${ibkr.tws.port}")
     private int TWS_PORT;
 
-    @Value("${ibkr.tws.account}")
-    private String ACCOUNT;
-
     private final TimeSeriesHandler timeSeriesHandler;
     private final ContractRepository contractRepository;
     private final OrderManagerService orderManagerService;
