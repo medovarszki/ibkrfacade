@@ -3,6 +3,7 @@ package hu.auxin.ibkrfacade;
 import com.ib.client.Contract;
 import com.ib.client.Types;
 import hu.auxin.ibkrfacade.data.ContractRepository;
+import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.OrderHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.data.holder.PriceHolder;
@@ -58,10 +59,15 @@ public class WebHandler {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/contract/{conid}")
+    ContractHolder getContractByConid(@PathVariable int conid) {
+        return contractRepository.findById(conid).orElse(new ContractHolder(contractManagerService.getContractByConid(conid)));
+    }
+
     @PostMapping("/order")
     public void placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
         Contract contract = contractRepository.findById(conid)
-                .orElseThrow(() -> new IllegalArgumentException("Contract not found in Redis with conid " + conid))
+                .orElse(new ContractHolder(contractManagerService.getContractByConid(conid)))
                 .getContract();
         orderManagerService.placeLimitOrder(contract, Types.Action.valueOf(action), quantity, price);
     }
@@ -81,8 +87,13 @@ public class WebHandler {
         return positionManagerService.getAllPositions();
     }
 
-    @PostMapping("/lastPrice")
-    public PriceHolder getLastPrice(@RequestBody Contract contract) {
+    @PostMapping("/price")
+    public PriceHolder getLastPriceByContract(@RequestBody Contract contract) {
         return contractManagerService.getLastPriceByContract(contract);
+    }
+
+    @GetMapping("/price/{conid}")
+    public PriceHolder getLastPriceByConid(@PathVariable int conid) {
+        return contractManagerService.getLastPriceByConid(conid);
     }
 }

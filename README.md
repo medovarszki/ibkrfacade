@@ -64,3 +64,6 @@ If you want to change or extend the functionality of this, you need to extend th
 **See:** [RedisTimeSeries](https://redis.io/docs/stack/timeseries)
 
 ### Trading strategy automation
+Since you have hands-on market data, with the methods of `OrderManagerService`, `ContractManagerService` and `PositionManagerService` there is no predetermined way how to implement a trading strategy, the only limit is your imagination :)  
+
+You can find an example implementation in the `strategy` package, which periodically checks the prices from Redis looking for a trading signal. Once the trade performed, it checks for an exit.
