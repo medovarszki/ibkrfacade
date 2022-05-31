@@ -13,13 +13,17 @@ This project is built around the [Interactive Broker's TWS library](https://inte
 
 
 ## Prerequisites
+As step zero, you need an account at Interactive Brokers.
 
 ### TWS or IB gateway
-In order to access market data you'll need an account at Interactive Brokers with subscription to those markets and instruments you need.
-
-Furthermore, you have to install a [Trading Workstation](https://www.interactivebrokers.com/en/index.php?f=14099#tws-software) (TWS) or an [IB Gateway](https://www.interactivebrokers.com/en/?f=/en/trading/ibgateway-stable.php) which provide access to Interactive Brokers' infrastructure. If you are using TWS, make sure that the API connection is enabled, and if you want to placing orders through the library, the connection is not restricted to "read-only".
+[Trading Workstation](https://www.interactivebrokers.com/en/index.php?f=14099#tws-software) (TWS) or [IB Gateway](https://www.interactivebrokers.com/en/?f=/en/trading/ibgateway-stable.php) has to be installed in order to provide access to Interactive Brokers' infrastructure. If you are using TWS, make sure that the API connection is enabled, and if you want to placing orders through the library, the connection is not restricted to "read-only".
 
 **See more:** [TWS API initial setup](https://interactivebrokers.github.io/tws-api/initial_setup.html)
+
+### Market data subscription
+In order to access market data you'll need an account at Interactive Brokers with subscription to those markets and instruments you need. If you want to use a paper trading account first (which I highly recommend) instead of your live account, you need to share your market subscriptions between your accounts.
+
+**See:** [Sharing market data subscription](https://interactivebrokers.github.io/tws-api/market_data.html#paper_sharing)
 
 ### TWS API
 You have to download the TWS API from https://interactivebrokers.github.io for Java. It contains a TwsApi.jar file which you need to have on your classpath. (You can find a working version of it in the /lib folder of this repository.) This is a legacy JAR maintained by Interactive Brokers and you cannot find it in the central Maven repository, so if you want to build this project with Maven, you need to manually add it to your local artifact repository (see pom.xml dependencies section), or make it available on the classpath some other way.
@@ -52,18 +56,28 @@ Every basic function needed for using the system is exposed through a REST API, 
 - Placing orders
 - Getting positions
 
+You can change the port number (8082 by default) and URL from the `application.properties` file.
+
 The endpoints are documented using [Swagger](http://swagger.io) annotations. After you started the application you should find the documentation under the following URL: http://localhost:8082/swagger-ui/
 
-### Market data analysis
+### Market data analysis (Redis TimeSeries)
 If you have your Redis ready you can subscribe to market data feed of any instrument available on Interactive Brokers through your brokerage account.
 
 From Java, you can use the `ContractManagerService.subscribe()` method or via HTTP you can use the `/subscribe` endpoint. If everything works as expected, the Contract itself should be saved to Redis under the conid of the Contract as key, and two time series should be created for storing the price information.
 
 If you want to change or extend the functionality of this, you need to extend the `TimeSeriesHandler` class. You can utilize the full power of Redis from calculating OHLCV data automatically to using it as a pub/sub service, it's all up to you. 
 
+Once you have subscribed to an instrument, the price stream (bid/ask changes) will be written into the Redis by the following pattern:
+- A `ContractHolder` will be created and saved by it's `conid` used as a key
+- The `ContractHolder` contains the `Contract` descriptor provided by Interactive Brokers
+- The `ContractHolder` has a `streamRequestId` which is used for identifying the communication "stream" with the TWS itself. When you send a request to Interactive Brokers through TWS with a unique number (the IB documentation refers to this identifier as streamId or tickId), this number will be used in the response method calls. We save this number into the `ContractHolder` as `streamRequestId`.
+- The time series will be available under the following key format: `stream:[streamRequestId]:[BID/ASK]` so basically two series are stored per subscribed instrument: one for the bids and one for the asks.
+
 **See:** [RedisTimeSeries](https://redis.io/docs/stack/timeseries)
 
 ### Trading strategy automation
 Since you have hands-on market data, with the methods of `OrderManagerService`, `ContractManagerService` and `PositionManagerService` there is no predetermined way how to implement a trading strategy, the only limit is your imagination :)  
 
-You can find an example implementation in the `strategy` package, which periodically checks the prices from Redis looking for a trading signal. Once the trade performed, it checks for an exit.
+You can find an example implementation in the `strategy` package, which periodically checks the prices of Apple stock from Redis looking for a trading signal. Once the trade performed (you have an open position) it checks the price movements for a possible exit.
+
+**Important: This is not a real strategy. **
