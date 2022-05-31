@@ -24,7 +24,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
- * For testing purpose ONLY!
+ * Sample trading strategy, don't even think about using it real conditions!
  */
 @Slf4j
 @Component
@@ -40,11 +40,10 @@ public class TrendTradingStrategy {
     private int conid = 265598;  //AAPL
     private ContractHolder apple;
 
-    public TrendTradingStrategy(@Autowired OrderManagerService orderManagerService,
-                                @Autowired PositionManagerService positionManagerService,
-                                @Autowired TimeSeriesHandler timeSeriesHandler,
-                                @Autowired ContractManagerService contractManagerService,
-                                @Autowired ContractRepository contractRepository) {
+    @Autowired
+    public TrendTradingStrategy(OrderManagerService orderManagerService, PositionManagerService positionManagerService,
+                                TimeSeriesHandler timeSeriesHandler, ContractManagerService contractManagerService,
+                                ContractRepository contractRepository) {
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.contractManagerService = contractManagerService;
@@ -114,7 +113,7 @@ public class TrendTradingStrategy {
                     orderManagerService.placeStopLimitOrder(apple.getContract(), isShort ? Types.Action.BUY : Types.Action.SELL, positionHolder.getQuantity(), activationPrice, limitPrice);
                 }
             } else {
-                // already have an active order, adjust
+                // already have an active order
             }
         }
     }

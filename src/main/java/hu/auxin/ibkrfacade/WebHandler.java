@@ -20,7 +20,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Web endpoints for accessing the functions
+ * Web endpoints for accessing TWS functionality
  */
 @RestController
 public class WebHandler {
@@ -30,10 +30,9 @@ public class WebHandler {
     private OrderManagerService orderManagerService;
     private PositionManagerService positionManagerService;
 
-    WebHandler(@Autowired ContractRepository contractRepository,
-               @Autowired ContractManagerService contractManagerService,
-               @Autowired OrderManagerService orderManagerService,
-               @Autowired PositionManagerService positionManagerService) {
+    @Autowired
+    WebHandler(ContractRepository contractRepository, ContractManagerService contractManagerService,
+               OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
         this.contractRepository = contractRepository;
         this.contractManagerService = contractManagerService;
         this.orderManagerService = orderManagerService;

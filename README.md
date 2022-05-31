@@ -52,7 +52,7 @@ Every basic function needed for using the system is exposed through a REST API, 
 - Placing orders
 - Getting positions
 
-**See:** [Detailed information about the API endpoints](/swagger-docs)
+The endpoints are documented using [Swagger](http://swagger.io) annotations. After you started the application you should find the documentation under the following URL: http://localhost:8082/swagger-ui/
 
 ### Market data analysis
 If you have your Redis ready you can subscribe to market data feed of any instrument available on Interactive Brokers through your brokerage account.

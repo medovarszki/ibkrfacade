@@ -1,6 +1,7 @@
 package hu.auxin.ibkrfacade.service;
 
 import com.ib.client.Contract;
+import com.ib.client.ContractDetails;
 import com.ib.client.TickType;
 import hu.auxin.ibkrfacade.TWS;
 import hu.auxin.ibkrfacade.data.ContractRepository;
@@ -22,9 +23,8 @@ public class ContractManagerService {
     private final TimeSeriesHandler timeSeriesHandler;
     private final ContractRepository contractRepository;
 
-    ContractManagerService(@Autowired TWS tws,
-                           @Autowired TimeSeriesHandler timeSeriesHandler,
-                           @Autowired ContractRepository contractRepository) {
+    @Autowired
+    ContractManagerService(TWS tws, TimeSeriesHandler timeSeriesHandler, ContractRepository contractRepository) {
         this.tws = tws;
         this.timeSeriesHandler = timeSeriesHandler;
         this.contractRepository = contractRepository;
@@ -36,6 +36,10 @@ public class ContractManagerService {
 
     public Contract getContractByConid(int conid) {
         return tws.getContractByConid(conid);
+    }
+
+    public ContractDetails getContractDetails(Contract contract) {
+        return tws.requestContractDetails(contract);
     }
 
     public void subscribeMarketData(Contract contract) {

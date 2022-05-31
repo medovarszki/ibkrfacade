@@ -1,14 +1,17 @@
 package hu.auxin.ibkrfacade.data.holder;
 
 import com.ib.client.Contract;
+import com.ib.client.ContractDetails;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
 
 import java.io.Serializable;
 
-@RedisHash("contract")
 @Data
+@NoArgsConstructor
+@RedisHash("contract")
 public class ContractHolder implements Serializable {
 
     /**
@@ -23,6 +26,11 @@ public class ContractHolder implements Serializable {
     private Contract contract;
 
     /**
+     * Details of the contract
+     */
+    private ContractDetails details;
+
+    /**
      * RequestId (or tickId at some places in TWS API) which identifies the data streams (if there's any) for the contract.
      * The key of a time series for a contract in Redis looks like the following: stream:[streamRequestId]:[BID|ASK]
      */
@@ -31,5 +39,10 @@ public class ContractHolder implements Serializable {
     public ContractHolder(Contract contract) {
         this.conid = contract.conid();
         this.contract = contract;
+    }
+
+    public ContractHolder(Contract contract, ContractDetails details) {
+        this(contract);
+        this.details = details;
     }
 }

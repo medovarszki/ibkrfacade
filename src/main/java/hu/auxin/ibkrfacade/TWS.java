@@ -40,10 +40,8 @@ public final class TWS implements EWrapper, TwsHandler {
     private final AtomicInteger autoIncrement = new AtomicInteger();
     private final Map<Integer, Object> results = new HashMap<>();
 
-    TWS(@Autowired ContractRepository contractRepository,
-        @Autowired TimeSeriesHandler timeSeriesHandler,
-        @Autowired OrderManagerService orderManagerService,
-        @Autowired PositionManagerService positionManagerService) {
+    @Autowired
+    TWS(ContractRepository contractRepository, TimeSeriesHandler timeSeriesHandler, OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
         this.timeSeriesHandler = timeSeriesHandler;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
@@ -75,11 +73,17 @@ public final class TWS implements EWrapper, TwsHandler {
             }
         }).start();
 
-        client.reqPositions(); // subscribe to positions
-        client.reqAutoOpenOrders(true); // subscribe to order changes
-        client.reqAllOpenOrders(); // initial request for open orders
+        try {
+            Thread.sleep(5000); //wait a bit until TWS connection builds up and everything gets ready
 
-        orderManagerService.setClient(client);
+            client.reqPositions(); // subscribe to positions
+            client.reqAutoOpenOrders(true); // subscribe to order changes
+            client.reqAllOpenOrders(); // initial request for open orders
+
+            orderManagerService.setClient(client);
+        } catch(InterruptedException e) {
+            log.error(e.getMessage());
+        }
     }
 
     @Override
@@ -88,8 +92,8 @@ public final class TWS implements EWrapper, TwsHandler {
             log.debug("Searching for contracts: {}", search);
             int i = autoIncrement.getAndIncrement();
             client.reqMatchingSymbols(i, search);
-            waitForResult(i); //TODO using async redis for wait for result
-            List<Contract> result = List.copyOf((List<Contract>) results.get(i));
+            waitForResult(i);
+            List<Contract> result = List.copyOf((List<Contract>) results.get(i));  //TODO fix later
             results.remove(i);
             return result;
         }
