@@ -80,4 +80,4 @@ Since you have hands-on market data, with the methods of `OrderManagerService`, 
 
 You can find an example implementation in the `strategy` package, which periodically checks the prices of Apple stock from Redis looking for a trading signal. Once the trade performed (you have an open position) it checks the price movements for a possible exit.
 
-**Important: This is not a real strategy. **
+**Important: This is not a real strategy. Don't even think about using it real conditions!**
