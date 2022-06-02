@@ -9,10 +9,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class IbkrFacadeApplication {
 
     public static void main(String[] args) {
-        //startup spring
-        TWS tws = SpringApplication.run(IbkrFacadeApplication.class, args).getBean(TWS.class);
-
-        //connect to TWS
-        tws.connect();
+        SpringApplication.run(IbkrFacadeApplication.class, args);
     }
 }

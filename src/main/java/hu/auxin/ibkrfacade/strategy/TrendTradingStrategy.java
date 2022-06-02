@@ -14,6 +14,7 @@ import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Scope;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Component
+@DependsOn("TWS")
 @Scope("singleton")
 public class TrendTradingStrategy {
 
@@ -76,10 +78,10 @@ public class TrendTradingStrategy {
             long now = new Date().getTime();
             long sampleLength = 60 * 1000; // take 1 minutes of data
 
-            Value[] bidArray = timeSeriesHandler.getInstance().range("stream:" + apple.getStreamRequestId() + ":" + TickType.BID, now-sampleLength, now);
+            Value[] bidArray = timeSeriesHandler.getInstance().range("stream:" + apple.getStreamRequestId() + ":" + TickType.BID, now - sampleLength, now);
 
-            if(bidArray.length > 10 && bidArray[0].getTime() > now-sampleLength) {
-                double lastPrice = bidArray[bidArray.length-1].getValue();
+            if(bidArray.length > 10 && bidArray[0].getTime() > now - sampleLength) {
+                double lastPrice = bidArray[bidArray.length - 1].getValue();
                 double changePercentage = ((lastPrice / bidArray[0].getValue()) - 1) * 100;
                 log.info("Change in time window: {}%", changePercentage);
                 if(Math.abs(changePercentage) > 0.05) { // rate of change in selected time window must be at least

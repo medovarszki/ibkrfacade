@@ -6,6 +6,7 @@ import com.redislabs.redistimeseries.RedisTimeSeries;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -18,6 +19,7 @@ import java.util.Map;
  * @see <a href="https://github.com/RedisTimeSeries/JRedisTimeSeries">JRedisTimeSeries</a>
  */
 @Component
+@DependsOnDatabaseInitialization
 public class TimeSeriesHandler {
 
     @Value("${redis.default-retention}")
@@ -58,8 +60,8 @@ public class TimeSeriesHandler {
      * Adds a new data point to the time series stored in Redis
      *
      * @param streamRequestId is the key parameter which identifies the data stream in TWS.
-     * @param value price
-     * @param tickType BID/ASK
+     * @param value           price
+     * @param tickType        BID/ASK
      * @return
      */
     public long addToStream(int streamRequestId, double value, TickType tickType) {
