@@ -19,7 +19,6 @@ import java.util.Map;
  * @see <a href="https://github.com/RedisTimeSeries/JRedisTimeSeries">JRedisTimeSeries</a>
  */
 @Component
-@DependsOnDatabaseInitialization
 public class TimeSeriesHandler {
 
     @Value("${redis.default-retention}")

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import redis.clients.jedis.exceptions.JedisDataException;
 
+import javax.annotation.PostConstruct;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,8 +47,6 @@ public final class TWS implements EWrapper, TwsHandler {
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.contractRepository = contractRepository;
-
-        this.connect();
     }
 
     private void waitForResult(int reqId) {
@@ -57,6 +56,7 @@ public final class TWS implements EWrapper, TwsHandler {
         return;
     }
 
+    @PostConstruct
     private void connect() {
         client.eConnect(TWS_HOST, TWS_PORT, 0);
 
@@ -75,17 +75,11 @@ public final class TWS implements EWrapper, TwsHandler {
             }
         }).start();
 
-//        try {
-//            Thread.sleep(5000); //wait a bit until TWS connection builds up and everything gets ready
+        client.reqPositions(); // subscribe to positions
+        client.reqAutoOpenOrders(true); // subscribe to order changes
+        client.reqAllOpenOrders(); // initial request for open orders
 
-            client.reqPositions(); // subscribe to positions
-            client.reqAutoOpenOrders(true); // subscribe to order changes
-            client.reqAllOpenOrders(); // initial request for open orders
-
-            orderManagerService.setClient(client);
-//        } catch(InterruptedException e) {
-//            log.error(e.getMessage());
-//        }
+        orderManagerService.setClient(client);
     }
 
     @Override

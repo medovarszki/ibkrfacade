@@ -9,6 +9,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class IbkrFacadeApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(IbkrFacadeApplication.class, args);
+        SpringApplication.run(IbkrFacadeApplication.class, args).getBean(TWS.class);
     }
 }

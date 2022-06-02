@@ -55,18 +55,17 @@ public class TrendTradingStrategy {
 
     @PostConstruct
     private void init() {
+        Contract apple = contractManagerService.getContractByConid(conid);
+        contractManagerService.subscribeMarketData(apple);
+        Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
+        if(contractHolder.isPresent()) {
+            this.apple = contractHolder.get();
+        }
     }
 
     @Scheduled(fixedRate = 10, initialDelay = 10, timeUnit = TimeUnit.SECONDS)
     private synchronized void checkForTradingSignal() {
         if(apple == null) {
-            //TODO on startup
-            Contract apple = contractManagerService.getContractByConid(conid);
-            contractManagerService.subscribeMarketData(apple);
-            Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
-            if(contractHolder.isPresent()) {
-                this.apple = contractHolder.get();
-            }
             return;
         }
 
