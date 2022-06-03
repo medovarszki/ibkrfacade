@@ -27,11 +27,14 @@ public class TimeSeriesHandler {
     /**
      * Redis Time Series handler class from JRedisTimeSeries. You can access it from anywhere via getInstance()
      */
-    private RedisTimeSeries rts;
+    private final RedisTimeSeries rts;
+
+    @Value("${redis.timeseries.poolsize}")
+    private int POOL_SIZE;
 
     public TimeSeriesHandler(@Autowired RedisProperties redisProperties) {
         String password = StringUtils.hasText(redisProperties.getPassword()) ? redisProperties.getPassword() : null;
-        this.rts = new RedisTimeSeries(redisProperties.getHost(), redisProperties.getPort(), redisProperties.getTimeout().toMillisPart(), 3, password);
+        this.rts = new RedisTimeSeries(redisProperties.getHost(), redisProperties.getPort(), redisProperties.getTimeout().toMillisPart(), POOL_SIZE, password);
     }
 
     /**

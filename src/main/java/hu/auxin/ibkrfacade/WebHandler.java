@@ -31,10 +31,10 @@ import java.util.List;
 @DependsOn("TWS")
 public class WebHandler {
 
-    private ContractRepository contractRepository;
-    private ContractManagerService contractManagerService;
-    private OrderManagerService orderManagerService;
-    private PositionManagerService positionManagerService;
+    private final ContractRepository contractRepository;
+    private final ContractManagerService contractManagerService;
+    private final OrderManagerService orderManagerService;
+    private final PositionManagerService positionManagerService;
 
     @Autowired
     WebHandler(ContractRepository contractRepository, ContractManagerService contractManagerService,

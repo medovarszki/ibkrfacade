@@ -18,7 +18,7 @@ public class OrderManagerService {
 
     private int orderId = 100;
 
-    private Map<Integer, OrderHolder> orders = new HashMap<>();
+    private final Map<Integer, OrderHolder> orders = new HashMap<>();
 
     @NonNull
     private EClientSocket client;
