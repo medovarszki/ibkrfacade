@@ -2,6 +2,7 @@ package hu.auxin.ibkrfacade.data.holder;
 
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
@@ -9,6 +10,7 @@ import org.springframework.data.redis.core.RedisHash;
 
 import java.io.Serializable;
 
+@Schema(description = "Contract descriptor. It uses the conid of the Contract as a kind-of key.")
 @Data
 @NoArgsConstructor
 @RedisHash("contract")

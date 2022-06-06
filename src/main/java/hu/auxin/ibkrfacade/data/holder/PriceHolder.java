@@ -1,11 +1,14 @@
 package hu.auxin.ibkrfacade.data.holder;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
+import org.springframework.web.bind.annotation.ModelAttribute;
 
 import java.io.Serializable;
 
+@Schema(description = "Represents a bid/ask pair.")
 @Data
 public class PriceHolder implements Serializable {
 

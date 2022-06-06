@@ -13,20 +13,19 @@ import hu.auxin.ibkrfacade.service.PositionManagerService;
 import hu.auxin.ibkrfacade.twssample.ContractSamples;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Web endpoints for accessing TWS functionality
  */
-@Schema(title = "IBKR Facade web methods")
 @RestController
 @DependsOn("TWS")
 public class WebHandler {
@@ -35,6 +34,13 @@ public class WebHandler {
     private ContractManagerService contractManagerService;
     private OrderManagerService orderManagerService;
     private PositionManagerService positionManagerService;
+
+    /**
+     * This variable decides if "high frequency" data stream is needed from IBKR.
+     * It's value can be set from application.properties file.
+     */
+    @Value("${ibkr.tick-by-tick-stream}")
+    private boolean tickByTickStream;
 
     @Autowired
     WebHandler(ContractRepository contractRepository, ContractManagerService contractManagerService,
@@ -45,41 +51,47 @@ public class WebHandler {
         this.positionManagerService = positionManagerService;
     }
 
-    @Operation(summary = "Search for an instrument by it's ticker, or part of it's name.", parameters = {@Parameter(description = "Ticker, or name of the traded instrument")})
+    @Operation(summary = "Search for an instrument by it's ticker, or part of it's name.",
+        parameters = {
+            @Parameter(description = "Ticker, or name of the traded instrument", examples = {
+                    @ExampleObject(name = "Ticker", value = "AAPL"),
+                    @ExampleObject(name = "Company name", value = "Apple")
+            })
+        }
+    )
     @GetMapping("/search")
-    List<Contract> searchContract(@RequestParam String query) {
-        return contractManagerService.searchContract(query);
+    List<ContractHolder> searchContract(@RequestParam String query) {
+        return contractManagerService.searchContract(query).stream()
+                .map(ContractHolder::new)
+                .collect(Collectors.toList());
     }
 
     @Operation(summary = "Subscribes to an instrument by it's conid. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries",
         parameters = {
-            @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument"),
-            @Parameter(name = "tickByTick", description = "True means high frequency data stream. It's default value can be set from application.properties file.", allowEmptyValue = true)
+            @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
         }
     )
     @GetMapping("/subscribe")
-    ResponseEntity subscribeMarketDataByConid(@RequestParam int conid, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
+    void subscribeMarketDataByConid(@RequestParam int conid) {
         Contract contract = ContractSamples.ByConId();
         contract.conid(conid);
-        contractManagerService.subscribeMarketData(contract, tickByTick);
-        return ResponseEntity.ok().build();
+        contractManagerService.subscribeMarketData(contract, tickByTickStream);
     }
 
     @Operation(summary = "Subscribes to an instrument by the Contract entity sent in request body. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries",
         parameters = {
-            @Parameter(name = "contract", description = "The Contract descriptor object as a JSON"),
-            @Parameter(name = "tickByTick", description = "True means high frequency data stream. It's default value can be set from application.properties file.", allowEmptyValue = true)
-    })
+            @Parameter(name = "contract", description = "The Contract descriptor object as a JSON.")
+        }
+    )
     @PostMapping("/subscribe")
-    ResponseEntity subscribeMarketDataByContract(@RequestBody Contract contract, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
-        contractManagerService.subscribeMarketData(contract, tickByTick);
-        return ResponseEntity.ok().build();
+    void subscribeMarketDataByContract(@RequestBody Contract contract) {
+        contractManagerService.subscribeMarketData(contract, tickByTickStream);
     }
 
     @Operation(summary = "Returns with the ContractHolder which contains the Contract descriptor itself and the streamRequestId if you are already subscribed to the instrument.",
-            parameters = {
-                    @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
-            }
+        parameters = {
+            @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
+        }
     )
     @GetMapping("/contract/{conid}")
     ContractHolder getContractByConid(@PathVariable int conid) {
@@ -93,12 +105,11 @@ public class WebHandler {
             @Parameter(name = "price", description = "Price value")
     })
     @PostMapping("/order")
-    ResponseEntity placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
+    void placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
         Contract contract = contractRepository.findById(conid)
                 .orElse(new ContractHolder(contractManagerService.getContractByConid(conid)))
                 .getContract();
         orderManagerService.placeLimitOrder(contract, Types.Action.valueOf(action), quantity, price);
-        return ResponseEntity.ok().build();
     }
 
     @Operation(summary = "Returns with the list of orders.")
