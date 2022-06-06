@@ -18,7 +18,7 @@ import java.util.List;
 @Scope("singleton")
 public class ContractManagerService {
 
-    private final TWS tws;
+    private TWS tws;
 
     private final TimeSeriesHandler timeSeriesHandler;
     private final ContractRepository contractRepository;

@@ -15,7 +15,7 @@ import java.util.Map;
 @Scope("singleton")
 public class PositionManagerService {
 
-    private final Map<Integer, PositionHolder> positions = new HashMap<>();
+    private Map<Integer, PositionHolder> positions = new HashMap<>();
 
     public void addPosition(PositionHolder positionHolder) {
         if(positionHolder.getQuantity() == 0) {
