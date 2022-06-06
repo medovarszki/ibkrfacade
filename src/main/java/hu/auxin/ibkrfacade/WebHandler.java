@@ -52,10 +52,10 @@ public class WebHandler {
     }
 
     @Operation(summary = "Subscribes to an instrument by it's conid. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries",
-            parameters = {
-                    @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument"),
-                    @Parameter(name = "tickByTick", description = "True means high frequency data stream. It's default value can be set from application.properties file.", allowEmptyValue = true)
-            }
+        parameters = {
+            @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument"),
+            @Parameter(name = "tickByTick", description = "True means high frequency data stream. It's default value can be set from application.properties file.", allowEmptyValue = true)
+        }
     )
     @GetMapping("/subscribe")
     ResponseEntity subscribeMarketDataByConid(@RequestParam int conid, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
@@ -66,11 +66,10 @@ public class WebHandler {
     }
 
     @Operation(summary = "Subscribes to an instrument by the Contract entity sent in request body. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries",
-            parameters = {
-                    @Parameter(name = "contract", description = "The Contract descriptor object as a JSON"),
-                    @Parameter(name = "tickByTick", description = "True means high frequency data stream. It's default value can be set from application.properties file.", allowEmptyValue = true)
-            }
-    )
+        parameters = {
+            @Parameter(name = "contract", description = "The Contract descriptor object as a JSON"),
+            @Parameter(name = "tickByTick", description = "True means high frequency data stream. It's default value can be set from application.properties file.", allowEmptyValue = true)
+    })
     @PostMapping("/subscribe")
     ResponseEntity subscribeMarketDataByContract(@RequestBody Contract contract, @Value("${ibkr.tick-by-tick-stream}") boolean tickByTick) {
         contractManagerService.subscribeMarketData(contract, tickByTick);
@@ -87,14 +86,12 @@ public class WebHandler {
         return contractRepository.findById(conid).orElse(new ContractHolder(contractManagerService.getContractByConid(conid)));
     }
 
-    @Operation(summary = "Sends an order to the market.",
-            parameters = {
-                    @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument"),
-                    @Parameter(name = "action", description = "BUY or SELL"),
-                    @Parameter(name = "quantity", description = "Quantity"),
-                    @Parameter(name = "price", description = "Price value")
-            }
-    )
+    @Operation(summary = "Sends an order to the market.", parameters = {
+            @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument"),
+            @Parameter(name = "action", description = "BUY or SELL"),
+            @Parameter(name = "quantity", description = "Quantity"),
+            @Parameter(name = "price", description = "Price value")
+    })
     @PostMapping("/order")
     ResponseEntity placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
         Contract contract = contractRepository.findById(conid)
@@ -122,13 +119,17 @@ public class WebHandler {
         return positionManagerService.getAllPositions();
     }
 
-    @Operation(summary = "Returns with the last available bid and ask for the given Contract.", parameters = {@Parameter(name = "contract", description = "The Contract descriptor object as a JSON")})
+    @Operation(summary = "Returns with the last available bid and ask for the given Contract.", parameters = {
+            @Parameter(name = "contract", description = "The Contract descriptor object as a JSON")
+    })
     @PostMapping("/price")
     PriceHolder getLastPriceByContract(@RequestBody Contract contract) {
         return contractManagerService.getLastPriceByContract(contract);
     }
 
-    @Operation(summary = "Returns with the last available bid and ask by conid.", parameters = {@Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")})
+    @Operation(summary = "Returns with the last available bid and ask by conid.", parameters = {
+            @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
+    })
     @GetMapping("/price/{conid}")
     PriceHolder getLastPriceByConid(@PathVariable int conid) {
         return contractManagerService.getLastPriceByConid(conid);

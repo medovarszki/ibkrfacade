@@ -56,16 +56,16 @@ Every basic function needed for using the system is exposed through a REST API, 
 - Placing orders
 - Getting positions
 
-You can change the port number (8082 by default) and URL from the `application.properties` file.
+You can change the port number (8082 by default) and context-path (default is `/ibkr`) from the `application.properties` file.
 
-The endpoints are documented using [Swagger](http://swagger.io) annotations. After you started the application you should find the documentation under the following URL: http://localhost:8082/swagger-ui/
+The endpoints are documented using [Swagger OpenAPI](http://swagger.io) annotations. After you started the application you should find the documentation under the following URL: http://localhost:8082/ibkr/swagger-ui/
 
 ### Market data analysis (Redis TimeSeries)
 If you have your Redis ready you can subscribe to market data feed of any instrument available on Interactive Brokers through your brokerage account.
 
 From Java, you can use the `ContractManagerService.subscribe()` method or via HTTP you can use the `/subscribe` endpoint. If everything works as expected, the Contract itself should be saved to Redis under the conid of the Contract as key, and two time series should be created for storing the price information.
 
-If you want to change or extend the functionality of this, you need to extend the `TimeSeriesHandler` class. You can utilize the full power of Redis from calculating OHLCV data automatically to using it as a pub/sub service, it's all up to you. 
+If you want to change or extend the functionality of this, you need to extend the `TimeSeriesHandler` class. You can utilize the full power of Redis from calculating OHLC data automatically to using it as a pub/sub service, it's all up to you. 
 
 Once you have subscribed to an instrument, the price stream (bid/ask changes) will be written into the Redis by the following pattern:
 - A `ContractHolder` will be created and saved by it's `conid` used as a key
