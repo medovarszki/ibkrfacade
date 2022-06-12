@@ -13,7 +13,13 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
+/**
+ * Contract related operations. The service acts as a bridge between the TWS itself and the other parts of the system,
+ * eg. the REST API or the strategy implementations.
+ */
 @Service
 @Scope("singleton")
 public class ContractManagerService {
@@ -35,7 +41,8 @@ public class ContractManagerService {
     }
 
     public Contract getContractByConid(int conid) {
-        return tws.getContractByConid(conid);
+        Optional<ContractHolder> contractHolderInRedis = contractRepository.findById(conid);
+        return contractHolderInRedis.isPresent() ? contractHolderInRedis.get().getContract() : tws.requestContractByConid(conid);
     }
 
     public ContractDetails getContractDetails(Contract contract) {
@@ -71,6 +78,16 @@ public class ContractManagerService {
     }
 
     /**
+     * Getting the option chain for an underlying instrument
+     * @param underlyingConid
+     * @return
+     */
+    public List<ContractHolder> getOptionChainByConid(int underlyingConid) {
+        Contract underlying = getContractByConid(underlyingConid);
+        return tws.requestForOptionChain(underlying).stream().map(this::getContractHolder).collect(Collectors.toList());
+    }
+
+    /**
      * Returns the latest available ask and bid price for the given ContractHolder
      * @param contractHolder
      * @return
@@ -79,5 +96,25 @@ public class ContractManagerService {
         double bid = timeSeriesHandler.getInstance().get("stream:" + contractHolder.getStreamRequestId() + ":" + TickType.BID).getValue();
         double ask = timeSeriesHandler.getInstance().get("stream:" + contractHolder.getStreamRequestId() + ":" + TickType.ASK).getValue();
         return new PriceHolder(bid, ask);
+    }
+
+    /**
+     * Checking in Redis if the requested Contract already has a data stream.
+     * If so, return with the already stored ContractHolder instead of creating a new one.
+     * @param contract
+     * @return
+     */
+    public ContractHolder getContractHolder(Contract contract) {
+        return contractRepository.findById(contract.conid()).orElse(new ContractHolder(contract));
+    }
+
+    /**
+     * Checking in Redis if the requested Contract already has a data stream.
+     * If so, return with the already stored ContractHolder instead of creating a new one.
+     * @param conid
+     * @return
+     */
+    public ContractHolder getContractHolder(int conid) {
+        return new ContractHolder(getContractByConid(conid));
     }
 }

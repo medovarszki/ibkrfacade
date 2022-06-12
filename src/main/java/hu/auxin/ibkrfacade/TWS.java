@@ -1,6 +1,7 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
+import com.ib.contracts.OptContract;
 import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
@@ -12,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import redis.clients.jedis.exceptions.JedisDataException;
 
@@ -42,7 +44,8 @@ public final class TWS implements EWrapper, TwsHandler {
     private final Map<Integer, Object> results = new HashMap<>();
 
     @Autowired
-    TWS(ContractRepository contractRepository, TimeSeriesHandler timeSeriesHandler, OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
+    TWS(ContractRepository contractRepository, TimeSeriesHandler timeSeriesHandler,
+        OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
         this.timeSeriesHandler = timeSeriesHandler;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
@@ -50,6 +53,7 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     private void waitForResult(int reqId) {
+        //TODO not the most sophisticated wait mechanism
         while(!results.containsKey(reqId)) {
             continue;
         }
@@ -85,31 +89,40 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public List<Contract> searchContract(String search) {
         if(StringUtils.hasLength(search)) {
-            log.debug("Searching for contracts: {}", search);
-            int i = autoIncrement.getAndIncrement();
-            client.reqMatchingSymbols(i, search);
-            waitForResult(i);
-            List<Contract> result = List.copyOf((List<Contract>) results.get(i));  //TODO fix later
-            results.remove(i);
-            return result;
+            final int currentId = autoIncrement.getAndIncrement();
+            client.reqMatchingSymbols(currentId, search);
+            waitForResult(currentId);
+            return (List<Contract>) results.get(currentId);
         }
         return Collections.emptyList();
     }
 
     @Override
-    public Contract getContractByConid(int conid) {
+    public Contract requestContractByConid(int conid) {
         Contract contract = new Contract();
         contract.conid(conid);
         ContractDetails contractDetails = requestContractDetails(contract);
-        return contractDetails.contract();
+
+        ContractHolder contractHolder = new ContractHolder(contractDetails.contract());
+        contractHolder.setDetails(contractDetails);
+        contractRepository.save(contractHolder);
+
+        return contractHolder.getContract();
     }
 
     @Override
     public ContractDetails requestContractDetails(Contract contract) {
-        int i = autoIncrement.getAndIncrement();
-        client.reqContractDetails(i, contract);
-        waitForResult(i);
-        return (ContractDetails) results.get(i);
+        final int currentId = autoIncrement.getAndIncrement();
+        client.reqContractDetails(currentId, contract);
+        waitForResult(currentId);
+        ContractDetails details = (ContractDetails) results.get(currentId);
+
+        Optional<ContractHolder> contractHolder = contractRepository.findById(details.conid());
+        contractHolder.ifPresent(holder -> {
+            holder.setDetails(details);
+            contractRepository.save(holder);
+        });
+        return details;
     }
 
     @Override
@@ -131,6 +144,13 @@ public final class TWS implements EWrapper, TwsHandler {
         }
     }
 
+    @Override
+    public Collection<Contract> requestForOptionChain(Contract underlying) {
+        final int currentId = autoIncrement.getAndIncrement();
+        client.reqSecDefOptParams(currentId, underlying.symbol(), underlying.exchange(), underlying.secType().getApiString(), underlying.conid());
+        waitForResult(currentId);
+        return (Collection<Contract>) results.get(currentId);
+    }
 
     //-- TWS callbacks
 
@@ -507,13 +527,31 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [securityDefinitionOptionParameter]
     @Override
     public void securityDefinitionOptionalParameter(int reqId, String exchange, int underlyingConId, String tradingClass, String multiplier, Set<String> expirations, Set<Double> strikes) {
+        log.info("securityDefinitionOptionalParameter");
+        ContractHolder underlyingContractHolder = contractRepository.findById(underlyingConId).orElse(new ContractHolder(requestContractByConid(underlyingConId)));
+        for(Types.Right right : new Types.Right[]{Types.Right.Call, Types.Right.Put}) {
+            for(String expiration : expirations) {
+                for(Double strike : strikes) {
+                    Contract option = new OptContract(null, exchange, expiration, strike, right.getApiString());
+                    ContractHolder optionHolder = new ContractHolder(option);
+                    contractRepository.save(optionHolder);
+                    underlyingContractHolder.getOptionChain().add(optionHolder);
+                }
+            }
+        }
+        underlyingContractHolder.setOptionChainRequestId(reqId);
+        contractRepository.save(underlyingContractHolder);
     }
     //! [securityDefinitionOptionParameter]
 
     //! [securityDefinitionOptionParameterEnd]
     @Override
     public void securityDefinitionOptionalParameterEnd(int reqId) {
-        //System.out.println("Security Definition Optional Parameter End. Request: " + reqId);
+        ContractHolder underlying = contractRepository.findContractHolderByOptionChainRequestId(reqId);
+        if(underlying != null && !CollectionUtils.isEmpty(underlying.getOptionChain())) {
+            results.put(reqId, underlying.getOptionChain());
+        }
+        log.debug("Option chain retrieved");
     }
     //! [securityDefinitionOptionParameterEnd]
 
@@ -772,6 +810,7 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [error]
     @Override
     public void error(int id, int errorCode, String errorMsg) {
+        results.put(id, "Error code: " + errorCode + "; " + errorMsg);
         log.error("Error id: {}; Code: {}: {}", id, errorCode, errorMsg);
     }
 

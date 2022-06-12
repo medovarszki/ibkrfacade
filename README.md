@@ -6,9 +6,9 @@ This project is built around the [Interactive Broker's TWS library](https://inte
 
 - The basic functions of the TWS API exposed to a Rest API
     - Searching in Interactive Brokers' instrument master data
-    - Subscribe to market data for certain instruments
+    - Subscribe to market data for certain instruments, and store the time series data in Redis
     - Create and manager orders
-- Market data streamed into a Redis server from where you can do it whatever you want (eg.: using as a data source by creating a pub-sub message queue; or stream it to a time series database for further analitycs, build historical datasets, etc.)
+- Market data streamed into a Redis server from where you can do it whatever you want (eg.: save if for further analytics; generate OHLC data automatically with [built-in compaction policy](https://redis.io/docs/stack/timeseries/configuration/#compaction_policy-policy); using as a data source by creating a pub-sub message queue; build historical datasets, etc.)
 - Built-in sample trading strategy (not a real working strategy, just an example of course), which is based on periodical time series analysis looking for trading signal and placing orders.
 
 
@@ -31,6 +31,7 @@ You have to download the TWS API from https://interactivebrokers.github.io for J
 ### Redis server
 Redis is a powerful and extremely fast tool for storing market data. If you have a Redis server with RedisTimeSeries extension up and running, you can configure its access through the application.properties file, then the library will send the market data to the Redis for the subscribed instruments.
 
+If you don't want to install Redis, you can try [Redis Cloud](https://redis.com/try-free/) for free.
 
 ## How to use
 1. Checkout the project

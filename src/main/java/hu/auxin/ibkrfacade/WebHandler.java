@@ -71,20 +71,10 @@ public class WebHandler {
             @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
         }
     )
-    @GetMapping("/subscribe")
-    void subscribeMarketDataByConid(@RequestParam int conid) {
+    @GetMapping("/subscribe/{conid}")
+    void subscribeMarketDataByConid(@PathVariable int conid) {
         Contract contract = ContractSamples.ByConId();
         contract.conid(conid);
-        contractManagerService.subscribeMarketData(contract, tickByTickStream);
-    }
-
-    @Operation(summary = "Subscribes to an instrument by the Contract entity sent in request body. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries",
-        parameters = {
-            @Parameter(name = "contract", description = "The Contract descriptor object as a JSON.")
-        }
-    )
-    @PostMapping("/subscribe")
-    void subscribeMarketDataByContract(@RequestBody Contract contract) {
         contractManagerService.subscribeMarketData(contract, tickByTickStream);
     }
 
@@ -144,5 +134,15 @@ public class WebHandler {
     @GetMapping("/price/{conid}")
     PriceHolder getLastPriceByConid(@PathVariable int conid) {
         return contractManagerService.getLastPriceByConid(conid);
+    }
+
+    @Operation(summary = "Returns with the option chain as the list of option typed Contracts for an underlying Contract. " +
+            "This method won't subscribe to the changes of the certain options. If you need the option data as a market stream, " +
+            "you have to subscribe to each option you want one-by-one.",
+            parameters = {@Parameter(name = "underlyingConid", description = "The conid (IBKR unique id) of the instrument")}
+    )
+    @GetMapping("/optionChain/{underlyingConid}")
+    Collection<ContractHolder> getOptionChain(@PathVariable int underlyingConid) {
+        return contractManagerService.getOptionChainByConid(underlyingConid);
     }
 }

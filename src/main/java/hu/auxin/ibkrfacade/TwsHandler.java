@@ -3,6 +3,7 @@ package hu.auxin.ibkrfacade;
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -14,7 +15,9 @@ public interface TwsHandler {
 
     List<Contract> searchContract(String search);
 
-    Contract getContractByConid(int conid);
+    Contract requestContractByConid(int conid);
 
     ContractDetails requestContractDetails(Contract contract);
+
+    Collection<Contract> requestForOptionChain(Contract contract);
 }
