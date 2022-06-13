@@ -4,6 +4,7 @@ import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
 import com.ib.client.TickType;
 import hu.auxin.ibkrfacade.TWS;
+import hu.auxin.ibkrfacade.TwsResultHolder;
 import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
@@ -11,6 +12,7 @@ import hu.auxin.ibkrfacade.data.holder.PriceHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,24 +39,27 @@ public class ContractManagerService {
     }
 
     public List<Contract> searchContract(String search) {
-        return tws.searchContract(search);
-    }
-
-    public Contract getContractByConid(int conid) {
-        Optional<ContractHolder> contractHolderInRedis = contractRepository.findById(conid);
-        return contractHolderInRedis.isPresent() ? contractHolderInRedis.get().getContract() : tws.requestContractByConid(conid);
+        TwsResultHolder resultHolder = tws.searchContract(search);
+        if(StringUtils.hasLength(resultHolder.getError())) {
+            throw new RuntimeException();
+        }
+        return (List<Contract>) resultHolder.getResult();
     }
 
     public ContractDetails getContractDetails(Contract contract) {
-        return tws.requestContractDetails(contract);
+        TwsResultHolder resultHolder = tws.requestContractDetails(contract);
+        if(StringUtils.hasLength(resultHolder.getError())) {
+            throw new RuntimeException();
+        }
+        return (ContractDetails) resultHolder.getResult();
     }
 
-    public void subscribeMarketData(Contract contract) {
-        subscribeMarketData(contract, false);
+    public int subscribeMarketData(Contract contract) {
+        return subscribeMarketData(contract, false);
     }
 
-    public void subscribeMarketData(Contract contract, boolean tickByTick) {
-        tws.subscribeMarketData(contract, tickByTick);
+    public int subscribeMarketData(Contract contract, boolean tickByTick) {
+        return tws.subscribeMarketData(contract, tickByTick);
     }
 
     /**
@@ -83,8 +88,10 @@ public class ContractManagerService {
      * @return
      */
     public List<ContractHolder> getOptionChainByConid(int underlyingConid) {
-        Contract underlying = getContractByConid(underlyingConid);
-        return tws.requestForOptionChain(underlying).stream().map(this::getContractHolder).collect(Collectors.toList());
+        ContractHolder underlying = getContractHolder(underlyingConid);
+        return tws.requestForOptionChain(underlying.getContract()).stream()
+                .map(this::getContractHolder)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -105,7 +112,7 @@ public class ContractManagerService {
      * @return
      */
     public ContractHolder getContractHolder(Contract contract) {
-        return contractRepository.findById(contract.conid()).orElse(new ContractHolder(contract));
+        return getContractHolder(contract.conid());
     }
 
     /**
@@ -115,6 +122,14 @@ public class ContractManagerService {
      * @return
      */
     public ContractHolder getContractHolder(int conid) {
-        return new ContractHolder(getContractByConid(conid));
+        Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
+        return contractHolder.orElseGet(() -> {
+            TwsResultHolder<ContractHolder> twsResult = tws.requestContractByConid(conid);
+            if(!StringUtils.hasLength(twsResult.getError())) {
+                contractRepository.save(twsResult.getResult());
+                return twsResult.getResult();
+            }
+            throw new RuntimeException(twsResult.getError());
+        });
     }
 }

@@ -2,6 +2,7 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
+import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 
 import java.util.Collection;
 import java.util.List;
@@ -11,13 +12,24 @@ import java.util.List;
  */
 public interface TwsHandler {
 
-    void subscribeMarketData(Contract contract, boolean tickData);
+    /**
+     * Subscribe to market data stream, returns with the stream id.
+     * @param contract
+     * @param tickData if true, we get tick-by-tick data
+     */
+    int subscribeMarketData(Contract contract, boolean tickData);
 
-    List<Contract> searchContract(String search);
+    TwsResultHolder<List<Contract>> searchContract(String search);
 
-    Contract requestContractByConid(int conid);
+    /**
+     * Gets the ContractDetails from TWS by the given conid, extracts the Contract object from it, writes the whole
+     * result to Redis, and returns with the Contract with it's details encapsulated to a TwsResultHolder type.
+     * @param conid
+     * @return
+     */
+    TwsResultHolder<ContractHolder> requestContractByConid(int conid);
 
-    ContractDetails requestContractDetails(Contract contract);
+    TwsResultHolder<ContractDetails> requestContractDetails(Contract contract);
 
     Collection<Contract> requestForOptionChain(Contract contract);
 }

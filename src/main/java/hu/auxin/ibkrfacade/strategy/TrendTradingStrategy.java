@@ -1,10 +1,8 @@
 package hu.auxin.ibkrfacade.strategy;
 
-import com.ib.client.Contract;
 import com.ib.client.TickType;
 import com.ib.client.Types;
 import com.redislabs.redistimeseries.Value;
-import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
@@ -21,7 +19,6 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.util.Date;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -34,7 +31,6 @@ import java.util.concurrent.TimeUnit;
 public class TrendTradingStrategy {
 
     private TimeSeriesHandler timeSeriesHandler;
-    private ContractRepository contractRepository;
     private OrderManagerService orderManagerService;
     private PositionManagerService positionManagerService;
     private ContractManagerService contractManagerService;
@@ -44,23 +40,18 @@ public class TrendTradingStrategy {
 
     @Autowired
     public TrendTradingStrategy(OrderManagerService orderManagerService, PositionManagerService positionManagerService,
-                                TimeSeriesHandler timeSeriesHandler, ContractManagerService contractManagerService,
-                                ContractRepository contractRepository) {
+                                TimeSeriesHandler timeSeriesHandler, ContractManagerService contractManagerService) {
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.contractManagerService = contractManagerService;
         this.timeSeriesHandler = timeSeriesHandler;
-        this.contractRepository = contractRepository;
     }
 
     @PostConstruct
     private void init() {
-        Contract apple = contractManagerService.getContractByConid(conid);
-        contractManagerService.subscribeMarketData(apple);
-        Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
-        if(contractHolder.isPresent()) {
-            this.apple = contractHolder.get();
-        }
+        this.apple = contractManagerService.getContractHolder(conid);
+        int streamId = contractManagerService.subscribeMarketData(apple.getContract());
+        this.apple.setStreamRequestId(streamId); //already saved to the contract in Redis, but here we need to add because the stream was started later than the request
     }
 
     @Scheduled(fixedRate = 10, initialDelay = 10, timeUnit = TimeUnit.SECONDS)

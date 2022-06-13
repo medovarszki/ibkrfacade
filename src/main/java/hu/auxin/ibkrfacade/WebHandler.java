@@ -2,7 +2,6 @@ package hu.auxin.ibkrfacade;
 
 import com.ib.client.Contract;
 import com.ib.client.Types;
-import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.OrderHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
@@ -30,7 +29,6 @@ import java.util.stream.Collectors;
 @DependsOn("TWS")
 public class WebHandler {
 
-    private ContractRepository contractRepository;
     private ContractManagerService contractManagerService;
     private OrderManagerService orderManagerService;
     private PositionManagerService positionManagerService;
@@ -43,9 +41,7 @@ public class WebHandler {
     private boolean tickByTickStream;
 
     @Autowired
-    WebHandler(ContractRepository contractRepository, ContractManagerService contractManagerService,
-               OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
-        this.contractRepository = contractRepository;
+    WebHandler(ContractManagerService contractManagerService, OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
         this.contractManagerService = contractManagerService;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
@@ -73,9 +69,7 @@ public class WebHandler {
     )
     @GetMapping("/subscribe/{conid}")
     void subscribeMarketDataByConid(@PathVariable int conid) {
-        Contract contract = ContractSamples.ByConId();
-        contract.conid(conid);
-        contractManagerService.subscribeMarketData(contract, tickByTickStream);
+        contractManagerService.subscribeMarketData(getContractByConid(conid).getContract(), tickByTickStream);
     }
 
     @Operation(summary = "Returns with the ContractHolder which contains the Contract descriptor itself and the streamRequestId if you are already subscribed to the instrument.",
@@ -85,7 +79,7 @@ public class WebHandler {
     )
     @GetMapping("/contract/{conid}")
     ContractHolder getContractByConid(@PathVariable int conid) {
-        return contractRepository.findById(conid).orElse(new ContractHolder(contractManagerService.getContractByConid(conid)));
+        return contractManagerService.getContractHolder(conid);
     }
 
     @Operation(summary = "Sends an order to the market.", parameters = {
@@ -96,9 +90,7 @@ public class WebHandler {
     })
     @PostMapping("/order")
     void placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
-        Contract contract = contractRepository.findById(conid)
-                .orElse(new ContractHolder(contractManagerService.getContractByConid(conid)))
-                .getContract();
+        Contract contract = contractManagerService.getContractHolder(conid).getContract();
         orderManagerService.placeLimitOrder(contract, Types.Action.valueOf(action), quantity, price);
     }
 

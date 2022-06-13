@@ -41,7 +41,7 @@ public final class TWS implements EWrapper, TwsHandler {
     private final EReaderSignal readerSignal = new EJavaSignal();
     private final EClientSocket client = new EClientSocket(this, readerSignal);
     private final AtomicInteger autoIncrement = new AtomicInteger();
-    private final Map<Integer, Object> results = new HashMap<>();
+    private final TwsResultHandler twsResultHandler = new TwsResultHandler();
 
     @Autowired
     TWS(ContractRepository contractRepository, TimeSeriesHandler timeSeriesHandler,
@@ -50,14 +50,6 @@ public final class TWS implements EWrapper, TwsHandler {
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.contractRepository = contractRepository;
-    }
-
-    private void waitForResult(int reqId) {
-        //TODO not the most sophisticated wait mechanism
-        while(!results.containsKey(reqId)) {
-            continue;
-        }
-        return;
     }
 
     @PostConstruct
@@ -87,46 +79,41 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     @Override
-    public List<Contract> searchContract(String search) {
+    public TwsResultHolder<List<Contract>> searchContract(String search) {
         if(StringUtils.hasLength(search)) {
             final int currentId = autoIncrement.getAndIncrement();
             client.reqMatchingSymbols(currentId, search);
-            waitForResult(currentId);
-            return (List<Contract>) results.get(currentId);
+            return twsResultHandler.getResult(currentId);
         }
-        return Collections.emptyList();
+        return new TwsResultHolder("Search parameter cannot be empty");
     }
 
     @Override
-    public Contract requestContractByConid(int conid) {
+    public TwsResultHolder<ContractHolder> requestContractByConid(int conid) {
         Contract contract = new Contract();
         contract.conid(conid);
-        ContractDetails contractDetails = requestContractDetails(contract);
-
-        ContractHolder contractHolder = new ContractHolder(contractDetails.contract());
-        contractHolder.setDetails(contractDetails);
-        contractRepository.save(contractHolder);
-
-        return contractHolder.getContract();
+        TwsResultHolder<ContractDetails> contractDetails = requestContractDetails(contract);
+        ContractHolder contractHolder = new ContractHolder(contractDetails.getResult().contract());
+        contractHolder.setDetails(contractDetails.getResult());
+        return new TwsResultHolder<>(contractHolder);
     }
 
     @Override
-    public ContractDetails requestContractDetails(Contract contract) {
+    public TwsResultHolder<ContractDetails> requestContractDetails(Contract contract) {
         final int currentId = autoIncrement.getAndIncrement();
         client.reqContractDetails(currentId, contract);
-        waitForResult(currentId);
-        ContractDetails details = (ContractDetails) results.get(currentId);
-
-        Optional<ContractHolder> contractHolder = contractRepository.findById(details.conid());
+        TwsResultHolder<ContractDetails> details = twsResultHandler.getResult(currentId);
+        Optional<ContractHolder> contractHolder = contractRepository.findById(details.getResult().conid());
         contractHolder.ifPresent(holder -> {
-            holder.setDetails(details);
+            holder.setDetails(details.getResult());
+            //TODO save from ContractManager
             contractRepository.save(holder);
         });
         return details;
     }
 
     @Override
-    public void subscribeMarketData(Contract contract, boolean tickByTick) {
+    public int subscribeMarketData(Contract contract, boolean tickByTick) {
         final int currentId = autoIncrement.getAndIncrement();
         Optional<ContractHolder> contractHolderOptional = contractRepository.findById(contract.conid());
         ContractHolder contractHolder = contractHolderOptional.orElse(new ContractHolder(contract));
@@ -142,14 +129,16 @@ public final class TWS implements EWrapper, TwsHandler {
         } else {
             client.reqMktData(currentId, contract, "", false, false, null);
         }
+        return currentId;
     }
 
     @Override
     public Collection<Contract> requestForOptionChain(Contract underlying) {
         final int currentId = autoIncrement.getAndIncrement();
         client.reqSecDefOptParams(currentId, underlying.symbol(), underlying.exchange(), underlying.secType().getApiString(), underlying.conid());
-        waitForResult(currentId);
-        return (Collection<Contract>) results.get(currentId);
+//        waitForResult(currentId);
+//        return (Collection<Contract>) results.get(currentId);
+        return null;
     }
 
     //-- TWS callbacks
@@ -284,7 +273,7 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [contractdetails]
     @Override
     public void contractDetails(int reqId, ContractDetails contractDetails) {
-        results.put(reqId, contractDetails);
+        twsResultHandler.setResult(reqId, new TwsResultHolder<ContractDetails>(contractDetails));
     }
 
     //! [contractdetails]
@@ -528,7 +517,10 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public void securityDefinitionOptionalParameter(int reqId, String exchange, int underlyingConId, String tradingClass, String multiplier, Set<String> expirations, Set<Double> strikes) {
         log.info("securityDefinitionOptionalParameter");
-        ContractHolder underlyingContractHolder = contractRepository.findById(underlyingConId).orElse(new ContractHolder(requestContractByConid(underlyingConId)));
+        ContractHolder underlyingContractHolder = contractRepository.findById(underlyingConId).orElseGet(() -> {
+            TwsResultHolder<ContractHolder> holder = requestContractByConid(underlyingConId);
+            return holder.getResult();
+        });
         for(Types.Right right : new Types.Right[]{Types.Right.Call, Types.Right.Put}) {
             for(String expiration : expirations) {
                 for(Double strike : strikes) {
@@ -549,7 +541,7 @@ public final class TWS implements EWrapper, TwsHandler {
     public void securityDefinitionOptionalParameterEnd(int reqId) {
         ContractHolder underlying = contractRepository.findContractHolderByOptionChainRequestId(reqId);
         if(underlying != null && !CollectionUtils.isEmpty(underlying.getOptionChain())) {
-            results.put(reqId, underlying.getOptionChain());
+            twsResultHandler.setResult(reqId, new TwsResultHolder<>(underlying.getOptionChain()));
         }
         log.debug("Option chain retrieved");
     }
@@ -561,7 +553,6 @@ public final class TWS implements EWrapper, TwsHandler {
         for(SoftDollarTier tier : tiers) {
             System.out.print("tier: " + tier.toString() + ", ");
         }
-
         System.out.println();
     }
     //! [softDollarTiers]
@@ -572,7 +563,6 @@ public final class TWS implements EWrapper, TwsHandler {
         for(FamilyCode fc : familyCodes) {
             System.out.print("Family Code. AccountID: " + fc.accountID() + ", FamilyCode: " + fc.familyCodeStr());
         }
-
         System.out.println();
     }
     //! [familyCodes]
@@ -584,7 +574,7 @@ public final class TWS implements EWrapper, TwsHandler {
         for(ContractDescription cd : contractDescriptions) {
             resultList.add(cd.contract());
         }
-        results.put(reqId, resultList);
+        twsResultHandler.setResult(reqId, new TwsResultHolder(resultList));
     }
     //! [symbolSamples]
 
@@ -810,8 +800,8 @@ public final class TWS implements EWrapper, TwsHandler {
     //! [error]
     @Override
     public void error(int id, int errorCode, String errorMsg) {
-        results.put(id, "Error code: " + errorCode + "; " + errorMsg);
         log.error("Error id: {}; Code: {}: {}", id, errorCode, errorMsg);
+        twsResultHandler.setResult(id, new TwsResultHolder("Error code: " + errorCode + "; " + errorMsg));
     }
 
     //! [error]

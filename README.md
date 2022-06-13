@@ -1,13 +1,17 @@
 # IBKR Facade
 ## Interactive Brokers API wrapper and trading toolbox 
-This project is built around the [Interactive Broker's TWS library](https://interactivebrokers.github.io/tws-api/) for Java. If you have a TWS or IB Gateway running, you can use this as a market data source for time series analysis, or even as a market gateway for trading bots.
+This project is built around the [Interactive Broker's TWS library](https://interactivebrokers.github.io/tws-api/) for Java. If you have a TWS or IB Gateway running, you can use this as a market data source for time series analysis, REST gateway to the market, or even as a trading bot framework.
+
+The IBKR facade based on Spring Boot so can leverage the capabilities provided by the Spring Framework as well which can be really useful for implementing automated trading strategies. 
 
 **In this project you'll find:**
 
 - The basic functions of the TWS API exposed to a Rest API
     - Searching in Interactive Brokers' instrument master data
+    - Fetching the option chain
     - Subscribe to market data for certain instruments, and store the time series data in Redis
-    - Create and manager orders
+    - Create and manage orders
+    - Retrieve open positions
 - Market data streamed into a Redis server from where you can do it whatever you want (eg.: save if for further analytics; generate OHLC data automatically with [built-in compaction policy](https://redis.io/docs/stack/timeseries/configuration/#compaction_policy-policy); using as a data source by creating a pub-sub message queue; build historical datasets, etc.)
 - Built-in sample trading strategy (not a real working strategy, just an example of course), which is based on periodical time series analysis looking for trading signal and placing orders.
 
@@ -66,7 +70,7 @@ If you have your Redis ready you can subscribe to market data feed of any instru
 
 From Java, you can use the `ContractManagerService.subscribe()` method or via HTTP you can use the `/subscribe` endpoint. If everything works as expected, the Contract itself should be saved to Redis under the conid of the Contract as key, and two time series should be created for storing the price information.
 
-If you want to change or extend the functionality of this, you need to extend the `TimeSeriesHandler` class. You can utilize the full power of Redis from calculating OHLC data automatically to using it as a pub/sub service, it's all up to you. 
+If you want to change or extend the functionality of this, you need to extend the `TimeSeriesHandler` class. You can utilize the full power of Redis from calculating OHLC data automatically, or using it as a pub/sub service, it's all up to you. 
 
 Once you have subscribed to an instrument, the price stream (bid/ask changes) will be written into the Redis by the following pattern:
 - A `ContractHolder` will be created and saved by it's `conid` used as a key
