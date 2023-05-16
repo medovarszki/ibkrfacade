@@ -9,11 +9,9 @@ import hu.auxin.ibkrfacade.data.holder.PriceHolder;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
-import hu.auxin.ibkrfacade.twssample.ContractSamples;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.web.bind.annotation.*;
@@ -40,21 +38,21 @@ public class WebHandler {
     @Value("${ibkr.tick-by-tick-stream}")
     private boolean tickByTickStream;
 
-    @Autowired
-    WebHandler(ContractManagerService contractManagerService, OrderManagerService orderManagerService, PositionManagerService positionManagerService) {
+    // @Autowired
+    WebHandler(ContractManagerService contractManagerService, OrderManagerService orderManagerService,
+            PositionManagerService positionManagerService) {
         this.contractManagerService = contractManagerService;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
     }
 
-    @Operation(summary = "Search for an instrument by it's ticker, or part of it's name.",
-        parameters = {
+    @Operation(summary = "Search for an instrument by it's ticker, or part of it's name.", parameters = {
             @Parameter(description = "Ticker, or name of the traded instrument", examples = {
                     @ExampleObject(name = "Ticker", value = "AAPL"),
                     @ExampleObject(name = "Company name", value = "Apple")
             })
-        }
-    )
+    })
+
     @GetMapping("/search")
     List<ContractHolder> searchContract(@RequestParam String query) {
         return contractManagerService.searchContract(query).stream()
@@ -62,21 +60,19 @@ public class WebHandler {
                 .collect(Collectors.toList());
     }
 
-    @Operation(summary = "Subscribes to an instrument by it's conid. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries",
-        parameters = {
+    @Operation(summary = "Subscribes to an instrument by it's conid. Subscription means the TWS starts streaming the market data for the instrument which will be saved into Redis TimeSeries", parameters = {
             @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
-        }
-    )
+    })
+
     @GetMapping("/subscribe/{conid}")
     void subscribeMarketDataByConid(@PathVariable int conid) {
         contractManagerService.subscribeMarketData(getContractByConid(conid).getContract(), tickByTickStream);
     }
 
-    @Operation(summary = "Returns with the ContractHolder which contains the Contract descriptor itself and the streamRequestId if you are already subscribed to the instrument.",
-        parameters = {
+    @Operation(summary = "Returns with the ContractHolder which contains the Contract descriptor itself and the streamRequestId if you are already subscribed to the instrument.", parameters = {
             @Parameter(name = "conid", description = "The conid (IBKR unique id) of the instrument")
-        }
-    )
+    })
+
     @GetMapping("/contract/{conid}")
     ContractHolder getContractByConid(@PathVariable int conid) {
         return contractManagerService.getContractHolder(conid);
@@ -89,7 +85,8 @@ public class WebHandler {
             @Parameter(name = "price", description = "Price value")
     })
     @PostMapping("/order")
-    void placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity, @RequestParam double price) {
+    void placeOrder(@RequestParam int conid, @RequestParam String action, @RequestParam double quantity,
+            @RequestParam double price) {
         Contract contract = contractManagerService.getContractHolder(conid).getContract();
         orderManagerService.placeLimitOrder(contract, Types.Action.valueOf(action), quantity, price);
     }
@@ -128,11 +125,12 @@ public class WebHandler {
         return contractManagerService.getLastPriceByConid(conid);
     }
 
-    @Operation(summary = "Returns with the option chain as the list of option typed Contracts for an underlying Contract. " +
-            "This method won't subscribe to the changes of the certain options. If you need the option data as a market stream, " +
-            "you have to subscribe to each option you want one-by-one.",
-            parameters = {@Parameter(name = "underlyingConid", description = "The conid (IBKR unique id) of the instrument")}
-    )
+    @Operation(summary = "Returns with the option chain as the list of option typed Contracts for an underlying Contract. "
+            +
+            "This method won't subscribe to the changes of the certain options. If you need the option data as a market stream, "
+            +
+            "you have to subscribe to each option you want one-by-one.", parameters = {
+                    @Parameter(name = "underlyingConid", description = "The conid (IBKR unique id) of the instrument") })
     @GetMapping("/optionChain/{underlyingConid}")
     Collection<ContractHolder> getOptionChain(@PathVariable int underlyingConid) {
         return contractManagerService.getOptionChainByConid(underlyingConid);
