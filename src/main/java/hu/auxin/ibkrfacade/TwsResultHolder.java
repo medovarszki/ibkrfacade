@@ -6,6 +6,7 @@ import java.io.Serializable;
 
 /**
  * Holder class for results coming through TWS API.
+ * 
  * @param <T> refers to the wrapped return type
  */
 @Getter
@@ -17,7 +18,8 @@ public class TwsResultHolder<T extends Object> implements Serializable {
     private T result;
 
     /**
-     * If something went wrong during the TWS communication it holds the error message
+     * If something went wrong during the TWS communication it holds the error
+     * message
      */
     private String error;
 

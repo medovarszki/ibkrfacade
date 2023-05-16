@@ -9,6 +9,8 @@ import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.PriceHolder;
+import redis.clients.jedis.timeseries.TSElement;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Contract related operations. The service acts as a bridge between the TWS itself and the other parts of the system,
+ * Contract related operations. The service acts as a bridge between the TWS
+ * itself and the other parts of the system,
  * eg. the REST API or the strategy implementations.
  */
 @Service
@@ -40,7 +43,7 @@ public class ContractManagerService {
 
     public List<Contract> searchContract(String search) {
         TwsResultHolder resultHolder = tws.searchContract(search);
-        if(StringUtils.hasLength(resultHolder.getError())) {
+        if (StringUtils.hasLength(resultHolder.getError())) {
             throw new RuntimeException();
         }
         return (List<Contract>) resultHolder.getResult();
@@ -48,7 +51,7 @@ public class ContractManagerService {
 
     public ContractDetails getContractDetails(Contract contract) {
         TwsResultHolder resultHolder = tws.requestContractDetails(contract);
-        if(StringUtils.hasLength(resultHolder.getError())) {
+        if (StringUtils.hasLength(resultHolder.getError())) {
             throw new RuntimeException();
         }
         return (ContractDetails) resultHolder.getResult();
@@ -64,26 +67,31 @@ public class ContractManagerService {
 
     /**
      * Returns the latest available ask and bid price for the given conid
+     * 
      * @param conid
      * @return
      */
     public PriceHolder getLastPriceByConid(int conid) {
-        ContractHolder contractHolder = contractRepository.findById(conid).orElseThrow(() -> new RuntimeException("No conid found"));
+        ContractHolder contractHolder = contractRepository.findById(conid)
+                .orElseThrow(() -> new RuntimeException("No conid found"));
         return getLastPriceByContractHolder(contractHolder);
     }
 
     /**
      * Returns the latest available ask and bid price for the given Contract
+     * 
      * @param contract
      * @return
      */
     public PriceHolder getLastPriceByContract(Contract contract) {
-        ContractHolder contractHolder = contractRepository.findById(contract.conid()).orElseThrow(() -> new RuntimeException("No Contract found"));
+        ContractHolder contractHolder = contractRepository.findById(contract.conid())
+                .orElseThrow(() -> new RuntimeException("No Contract found"));
         return getLastPriceByContractHolder(contractHolder);
     }
 
     /**
      * Getting the option chain for an underlying instrument
+     * 
      * @param underlyingConid
      * @return
      */
@@ -96,18 +104,23 @@ public class ContractManagerService {
 
     /**
      * Returns the latest available ask and bid price for the given ContractHolder
+     * 
      * @param contractHolder
      * @return
      */
     public PriceHolder getLastPriceByContractHolder(ContractHolder contractHolder) {
-        double bid = timeSeriesHandler.getInstance().get("stream:" + contractHolder.getStreamRequestId() + ":" + TickType.BID).getValue();
-        double ask = timeSeriesHandler.getInstance().get("stream:" + contractHolder.getStreamRequestId() + ":" + TickType.ASK).getValue();
-        return new PriceHolder(bid, ask);
+        TSElement bidTsElement = timeSeriesHandler.getInstance()
+                .tsGet(TimeSeriesHandler.STREAM_STRING + contractHolder.getStreamRequestId() + ":" + TickType.BID);
+        TSElement askTsElement = timeSeriesHandler.getInstance()
+                .tsGet(TimeSeriesHandler.STREAM_STRING + contractHolder.getStreamRequestId() + ":" + TickType.ASK);
+        return new PriceHolder(bidTsElement.getValue(), askTsElement.getValue());
     }
 
     /**
      * Checking in Redis if the requested Contract already has a data stream.
-     * If so, return with the already stored ContractHolder instead of creating a new one.
+     * If so, return with the already stored ContractHolder instead of creating a
+     * new one.
+     * 
      * @param contract
      * @return
      */
@@ -117,7 +130,9 @@ public class ContractManagerService {
 
     /**
      * Checking in Redis if the requested Contract already has a data stream.
-     * If so, return with the already stored ContractHolder instead of creating a new one.
+     * If so, return with the already stored ContractHolder instead of creating a
+     * new one.
+     * 
      * @param conid
      * @return
      */
@@ -125,7 +140,7 @@ public class ContractManagerService {
         Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
         return contractHolder.orElseGet(() -> {
             TwsResultHolder<ContractHolder> twsResult = tws.requestContractByConid(conid);
-            if(!StringUtils.hasLength(twsResult.getError())) {
+            if (!StringUtils.hasLength(twsResult.getError())) {
                 contractRepository.save(twsResult.getResult());
                 return twsResult.getResult();
             }
