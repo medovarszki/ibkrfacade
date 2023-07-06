@@ -1,10 +1,10 @@
 package hu.auxin.ibkrfacade;
 
 import com.ib.client.*;
-import com.ib.contracts.OptContract;
 import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
+import hu.auxin.ibkrfacade.data.holder.Option;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
@@ -51,7 +51,7 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     @PostConstruct
-    private void connect() {
+    private void connect() throws InterruptedException {
         client.eConnect(TWS_HOST, TWS_PORT, 0);
 
         final EReader reader = new EReader(client, readerSignal);
@@ -69,6 +69,8 @@ public final class TWS implements EWrapper, TwsHandler {
                 }
             }
         }).start();
+
+        Thread.sleep(2000); // avoid "Ignoring API request 'jextend.cs' since API is not accepted." error
 
         client.reqPositions(); // subscribe to positions
         client.reqAutoOpenOrders(true); // subscribe to order changes
@@ -132,13 +134,13 @@ public final class TWS implements EWrapper, TwsHandler {
     }
 
     @Override
-    public Collection<Contract> requestForOptionChain(Contract underlying) {
+    public Collection<Option> requestForOptionChain(Contract underlying) {
         final int currentId = autoIncrement.getAndIncrement();
-        client.reqSecDefOptParams(currentId, underlying.symbol(), underlying.exchange(),
+        client.reqSecDefOptParams(currentId, underlying.symbol(), "", //underlying.exchange(),
                 underlying.secType().getApiString(), underlying.conid());
-        // waitForResult(currentId);
-        // return (Collection<Contract>) results.get(currentId);
-        return null;
+
+        TwsResultHolder resultHolder = twsResultHandler.getResult(currentId);
+        return (Collection<Option>) resultHolder.getResult();
     }
 
     // -- TWS callbacks
@@ -546,21 +548,22 @@ public final class TWS implements EWrapper, TwsHandler {
     @Override
     public void securityDefinitionOptionalParameter(int reqId, String exchange, int underlyingConId,
             String tradingClass, String multiplier, Set<String> expirations, Set<Double> strikes) {
-        log.info("securityDefinitionOptionalParameter");
+
         ContractHolder underlyingContractHolder = contractRepository.findById(underlyingConId).orElseGet(() -> {
             TwsResultHolder<ContractHolder> holder = requestContractByConid(underlyingConId);
             return holder.getResult();
         });
+
         for (Types.Right right : new Types.Right[] { Types.Right.Call, Types.Right.Put }) {
             for (String expiration : expirations) {
                 for (Double strike : strikes) {
-                    Contract option = new OptContract(null, exchange, expiration, strike, right.getApiString());
-                    ContractHolder optionHolder = new ContractHolder(option);
-                    contractRepository.save(optionHolder);
-                    underlyingContractHolder.getOptionChain().add(optionHolder);
+                    String optionSymbol = underlyingContractHolder.getContract().symbol() + " " + expiration + " " + right;
+                    Option option = new Option(optionSymbol, expiration, strike, right);
+                    underlyingContractHolder.getOptionChain().add(option);
                 }
             }
         }
+
         underlyingContractHolder.setOptionChainRequestId(reqId);
         contractRepository.save(underlyingContractHolder);
     }
@@ -573,7 +576,7 @@ public final class TWS implements EWrapper, TwsHandler {
         if (underlying != null && !CollectionUtils.isEmpty(underlying.getOptionChain())) {
             twsResultHandler.setResult(reqId, new TwsResultHolder<>(underlying.getOptionChain()));
         }
-        log.debug("Option chain retrieved");
+        log.debug("Option chain retrieved: {}", underlying.getOptionChain());
     }
     // ! [securityDefinitionOptionParameterEnd]
 

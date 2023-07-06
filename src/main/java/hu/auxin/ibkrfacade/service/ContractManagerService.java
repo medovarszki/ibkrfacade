@@ -8,17 +8,17 @@ import hu.auxin.ibkrfacade.TwsResultHolder;
 import hu.auxin.ibkrfacade.data.ContractRepository;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
+import hu.auxin.ibkrfacade.data.holder.Option;
 import hu.auxin.ibkrfacade.data.holder.PriceHolder;
-import redis.clients.jedis.timeseries.TSElement;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import redis.clients.jedis.timeseries.TSElement;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Contract related operations. The service acts as a bridge between the TWS
@@ -95,11 +95,9 @@ public class ContractManagerService {
      * @param underlyingConid
      * @return
      */
-    public List<ContractHolder> getOptionChainByConid(int underlyingConid) {
+    public Collection<Option> getOptionChainByConid(int underlyingConid) {
         ContractHolder underlying = getContractHolder(underlyingConid);
-        return tws.requestForOptionChain(underlying.getContract()).stream()
-                .map(this::getContractHolder)
-                .collect(Collectors.toList());
+        return tws.requestForOptionChain(underlying.getContract());
     }
 
     /**

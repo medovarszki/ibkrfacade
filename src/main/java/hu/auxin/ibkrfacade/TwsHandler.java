@@ -3,6 +3,7 @@ package hu.auxin.ibkrfacade;
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
+import hu.auxin.ibkrfacade.data.holder.Option;
 
 import java.util.Collection;
 import java.util.List;
@@ -31,5 +32,5 @@ public interface TwsHandler {
 
     TwsResultHolder<ContractDetails> requestContractDetails(Contract contract);
 
-    Collection<Contract> requestForOptionChain(Contract contract);
+    Collection<Option> requestForOptionChain(Contract contract);
 }

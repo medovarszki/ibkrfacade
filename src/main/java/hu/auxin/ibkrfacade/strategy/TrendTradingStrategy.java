@@ -46,7 +46,7 @@ public class TrendTradingStrategy {
         this.timeSeriesHandler = timeSeriesHandler;
     }
 
-    @PostConstruct
+//    @PostConstruct
     private void init() {
         this.apple = contractManagerService.getContractHolder(conid);
         int streamId = contractManagerService.subscribeMarketData(apple.getContract());
@@ -90,7 +90,7 @@ public class TrendTradingStrategy {
         }
     }
 
-    @Scheduled(fixedRate = 5, initialDelay = 15, timeUnit = TimeUnit.SECONDS)
+//    @Scheduled(fixedRate = 5, initialDelay = 15, timeUnit = TimeUnit.SECONDS)
     private synchronized void handleClose() {
         PositionHolder positionHolder = positionManagerService.getPositionByContract(apple.getContract());
         if (positionHolder != null) {

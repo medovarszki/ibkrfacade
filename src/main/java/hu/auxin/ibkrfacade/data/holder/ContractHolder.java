@@ -23,7 +23,7 @@ public class ContractHolder implements Serializable {
      * The internal unique identifier of every Contract can be accessed on Interactive Brokers
      */
     @Id
-    private int conid;
+    private Integer conid;
 
     /**
      * The Contract descriptor itself
@@ -47,7 +47,7 @@ public class ContractHolder implements Serializable {
      *
      * @see hu.auxin.ibkrfacade.service.ContractManagerService#getOptionChainByConid(int)
      */
-    private Set<ContractHolder> optionChain = new HashSet<>();
+    private Set<Option> optionChain = new HashSet<>();
 
     /**
      * RequestId (or tickId at some places in TWS API) which identifies the data streams (if there's any) for the contract.
