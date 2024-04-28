@@ -9,6 +9,7 @@ import hu.auxin.ibkrfacade.data.holder.PriceHolder;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
+import hu.auxin.ibkrfacade.twssample.ConId;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import redis.clients.jedis.timeseries.TSElement;
@@ -35,7 +36,6 @@ public class TrendTradingStrategy {
     private PositionManagerService positionManagerService;
     private ContractManagerService contractManagerService;
 
-    private final int conid = 265598; // AAPL
     private ContractHolder apple;
 
     public TrendTradingStrategy(OrderManagerService orderManagerService, PositionManagerService positionManagerService,
@@ -46,9 +46,9 @@ public class TrendTradingStrategy {
         this.timeSeriesHandler = timeSeriesHandler;
     }
 
-//    @PostConstruct
+    @PostConstruct
     private void init() {
-        this.apple = contractManagerService.getContractHolder(conid);
+        this.apple = contractManagerService.getContractHolder(ConId.AAPL);
         int streamId = contractManagerService.subscribeMarketData(apple.getContract());
         this.apple.setStreamRequestId(streamId); // already saved to the contract in Redis, but here we need to add
                                                  // because the stream was started later than the request
@@ -70,8 +70,7 @@ public class TrendTradingStrategy {
 
             try {
                 java.util.List<TSElement> bidArray = timeSeriesHandler.getInstance()
-                        .tsRange(("stream:" + apple.getStreamRequestId() + ":" + TickType.BID), now - sampleLength,
-                                now);
+                        .tsRange(("stream:" + apple.getStreamRequestId() + ":" + TickType.BID), now - sampleLength, now);
 
                 TSElement firstTsElement = bidArray.get(0);
                 TSElement lastTsElement = bidArray.get(bidArray.size() - 1);
@@ -81,7 +80,7 @@ public class TrendTradingStrategy {
                     if (Math.abs(changePercentage) > 0.05) { // rate of change in selected time window must be at least
                         log.info("BUY ORDER");
                         orderManagerService.placeMarketOrder(
-                                contractManagerService.getContractHolder(conid).getContract(), Types.Action.BUY, 10);
+                                contractManagerService.getContractHolder(ConId.AAPL).getContract(), Types.Action.BUY, 10);
                     }
                 }
             } catch (Exception e) {

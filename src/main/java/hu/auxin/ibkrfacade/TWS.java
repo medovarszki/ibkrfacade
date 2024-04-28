@@ -554,7 +554,7 @@ public final class TWS implements EWrapper, TwsHandler {
             return holder.getResult();
         });
 
-        for (Types.Right right : new Types.Right[] { Types.Right.Call, Types.Right.Put }) {
+        for (Types.Right right : List.of(Types.Right.Call, Types.Right.Put)) {
             for (String expiration : expirations) {
                 for (Double strike : strikes) {
                     String optionSymbol = underlyingContractHolder.getContract().symbol() + " " + expiration + " " + right;
