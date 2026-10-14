@@ -2,99 +2,98 @@ package hu.auxin.ibkrfacade.data;
 
 import com.ib.client.Contract;
 import com.ib.client.TickType;
-
-import jakarta.validation.constraints.NotNull;
-
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.stereotype.Component;
-
-import redis.clients.jedis.JedisPooled;
+import redis.clients.jedis.UnifiedJedis;
+import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.timeseries.DuplicatePolicy;
 import redis.clients.jedis.timeseries.TSCreateParams;
+import redis.clients.jedis.timeseries.TSElement;
 
 /**
  * Proxy class for handling the time series data stored in Redis. You can use
- * either the methods of this,
- * or just get the RedisTimeSeries instance itself by getInstance().
+ * either the methods of this, or just get the Redis client itself by getInstance().
  *
- * @see <a href=
- *      "https://github.com/RedisTimeSeries/JRedisTimeSeries">JRedisTimeSeries</a>
+ * @see <a href="https://redis.io/docs/latest/develop/data-types/timeseries/">RedisTimeSeries</a>
  */
 @Component
 public class TimeSeriesHandler {
 
-    @Value("${redis.default-retention}")
-    @NotNull
-    private final int DEFAULT_RETENTION = 3600000;
+    public static final String STREAM_STRING = "stream:";
 
-    public static String STREAM_STRING = "stream:";
+    private final long retention;
 
     /**
-     * Redis Time Series handler class from JRedisTimeSeries. You can access it from
-     * anywhere via getInstance()
+     * Redis client (with RedisTimeSeries commands). You can access it from anywhere via getInstance()
      */
-    private JedisPooled jedisPooled;
+    private final UnifiedJedis jedis;
 
-    /**
-     * Access the Jedis instance from the connection pool.
-     *
-     * @return Jedis instance
-     */
-    public JedisPooled getInstance() {
-        return jedisPooled;
-    }
-
-    public TimeSeriesHandler(@Autowired RedisProperties redisProperties) {
-        jedisPooled = new JedisPooled(redisProperties.getHost(), redisProperties.getPort(), "default",
-                redisProperties.getPassword());
+    public TimeSeriesHandler(UnifiedJedis jedis, @Value("${redis.default-retention:3600000}") long retention) {
+        this.jedis = jedis;
+        this.retention = retention;
     }
 
     /**
-     * Creates two different timeseries in Redis. One is for the ask and one is for
-     * the bid prices.
-     * Both series are labeled with the conid of the Contract
+     * Access the Redis client.
      *
-     * @param streamRequestId
+     * @return Redis client instance
+     */
+    public UnifiedJedis getInstance() {
+        return jedis;
+    }
+
+    /**
+     * Key of a time series: stream:[conid]:[BID|ASK|LAST]
+     */
+    public static String key(int conid, TickType tickType) {
+        return STREAM_STRING + conid + ":" + tickType.name();
+    }
+
+    /**
+     * Creates three timeseries in Redis for the bid, ask and last prices of a Contract.
+     * All series are labeled with the conid and the symbol of the Contract.
+     * Already existing series are left untouched.
+     *
+     * @param conid
      * @param contract
      */
-    public void createStream(int streamRequestId, Contract contract) {
-        String bidKey = STREAM_STRING + streamRequestId + ":BID";
-        String askKey = STREAM_STRING + streamRequestId + ":ASK";
-
-        TSCreateParams paramsBid = new TSCreateParams()
-                .retention(DEFAULT_RETENTION)
-                .label("side", TickType.BID.name())
-                .label("conid", Integer.toString(contract.conid()))
-                .chunkSize(3600)
-                .duplicatePolicy(DuplicatePolicy.LAST);
-
-        jedisPooled.tsCreate(bidKey, paramsBid);
-
-        TSCreateParams paramsAsk = new TSCreateParams()
-                .retention(DEFAULT_RETENTION)
-                .label("side", TickType.BID.name())
-                .label("conid", Integer.toString(contract.conid()))
-                .chunkSize(3600)
-                .duplicatePolicy(DuplicatePolicy.LAST);
-
-        jedisPooled.tsCreate(askKey, paramsAsk);
-
+    public void createStream(int conid, Contract contract) {
+        for (TickType side : new TickType[]{TickType.BID, TickType.ASK, TickType.LAST}) {
+            String key = key(conid, side);
+            if (jedis.exists(key)) {
+                continue;
+            }
+            TSCreateParams params = new TSCreateParams()
+                    .retention(retention)
+                    .label("side", side.name())
+                    .label("conid", Integer.toString(conid))
+                    .label("symbol", String.valueOf(contract.symbol()))
+                    .chunkSize(4096)
+                    .duplicatePolicy(DuplicatePolicy.LAST);
+            jedis.tsCreate(key, params);
+        }
     }
 
     /**
      * Adds a new data point to the time series stored in Redis
      *
-     * @param streamRequestId is the key parameter which identifies the data stream
-     *                        in TWS.
-     * @param value           price
-     * @param tickType        BID/ASK
+     * @param conid    identifies the instrument
+     * @param value    price
+     * @param tickType BID/ASK/LAST
      * @return
      */
-    public long addToStream(int streamRequestId, double value, TickType tickType) {
-        return jedisPooled.tsAdd(STREAM_STRING + streamRequestId + ":" + tickType.name(), System.currentTimeMillis(),
-                value);
+    public long addToStream(int conid, double value, TickType tickType) {
+        return jedis.tsAdd(key(conid, tickType), System.currentTimeMillis(), value);
     }
 
+    /**
+     * Latest data point of a series, or null if the series does not exist or empty.
+     */
+    public TSElement latest(int conid, TickType tickType) {
+        try {
+            return jedis.tsGet(key(conid, tickType));
+        } catch (JedisDataException e) {
+            return null; // the key does not exist
+        }
+    }
 }

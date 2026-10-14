@@ -1,58 +1,69 @@
 package hu.auxin.ibkrfacade.configuration;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.ib.client.Contract;
-import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
+import com.ib.client.Decimal;
+import org.springframework.boot.data.redis.autoconfigure.DataRedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
-import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.GenericToStringSerializer;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.data.convert.ReadingConverter;
+import org.springframework.data.convert.WritingConverter;
+import org.springframework.data.redis.core.convert.RedisCustomConversions;
+import org.springframework.util.StringUtils;
+import redis.clients.jedis.DefaultJedisClientConfig;
+import redis.clients.jedis.RedisClient;
+import redis.clients.jedis.UnifiedJedis;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+
+/**
+ * Low level Redis client used for the RedisTimeSeries and the order idempotency commands. The Spring Data repositories
+ * use the auto-configured connection factory, both are configured from the same spring.data.redis.* properties.
+ */
 @Configuration
 public class RedisConfiguration {
 
-    @Bean
-    ObjectMapper objectMapper() {
-        JsonMapper mapper = new JsonMapper();
-        mapper.setSerializationInclusion(JsonInclude.Include.ALWAYS)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-                .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
-        return mapper;
+    @Bean(destroyMethod = "close")
+    UnifiedJedis unifiedJedis(DataRedisProperties properties) {
+        DefaultJedisClientConfig.Builder config = DefaultJedisClientConfig.builder()
+                .database(properties.getDatabase());
+        if (StringUtils.hasLength(properties.getPassword())) {
+            config.user(StringUtils.hasLength(properties.getUsername()) ? properties.getUsername() : "default")
+                    .password(properties.getPassword());
+        }
+        Duration timeout = properties.getTimeout();
+        if (timeout != null) {
+            config.timeoutMillis((int) timeout.toMillis());
+        }
+        return RedisClient.builder()
+                .hostAndPort(properties.getHost(), properties.getPort())
+                .clientConfig(config.build())
+                .build();
     }
 
+    /**
+     * The TWS API Decimal type (eg. in ContractDetails) has no default constructor, so it's stored as a string
+     * in the Redis hashes of the repositories.
+     */
     @Bean
-    JedisConnectionFactory jedisConnectionFactory() {
-        RedisProperties properties = redisProperties();
-        RedisStandaloneConfiguration configuration = new RedisStandaloneConfiguration();
-        configuration.setHostName(properties.getHost());
-        configuration.setPort(properties.getPort());
-        configuration.setPassword(properties.getPassword());
-        JedisConnectionFactory jedisConnectionFactory = new JedisConnectionFactory(configuration);
-        return jedisConnectionFactory;
+    RedisCustomConversions redisCustomConversions() {
+        return new RedisCustomConversions(List.of(new DecimalToBytes(), new BytesToDecimal()));
     }
 
-    @Bean
-    RedisProperties redisProperties() {
-        return new RedisProperties();
+    @WritingConverter
+    static class DecimalToBytes implements Converter<Decimal, byte[]> {
+        @Override
+        public byte[] convert(Decimal source) {
+            return source.toString().getBytes(StandardCharsets.UTF_8);
+        }
     }
 
-    @Bean
-    RedisTemplate<Object, Object> redisTemplate() {
-        RedisTemplate<Object, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(jedisConnectionFactory());
-        template.setDefaultSerializer(new GenericJackson2JsonRedisSerializer());
-        template.setKeySerializer(new GenericToStringSerializer(Contract.class));
-        template.setHashKeySerializer(new GenericJackson2JsonRedisSerializer());
-        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
-        return template;
+    @ReadingConverter
+    static class BytesToDecimal implements Converter<byte[], Decimal> {
+        @Override
+        public Decimal convert(byte[] source) {
+            return Decimal.parse(new String(source, StandardCharsets.UTF_8));
+        }
     }
-
 }

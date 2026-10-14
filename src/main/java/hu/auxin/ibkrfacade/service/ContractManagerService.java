@@ -2,147 +2,141 @@ package hu.auxin.ibkrfacade.service;
 
 import com.ib.client.Contract;
 import com.ib.client.ContractDetails;
-import com.ib.client.TickType;
-import hu.auxin.ibkrfacade.TWS;
-import hu.auxin.ibkrfacade.TwsResultHolder;
+import com.ib.client.Types;
 import hu.auxin.ibkrfacade.data.ContractRepository;
-import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.Option;
-import hu.auxin.ibkrfacade.data.holder.PriceHolder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Scope;
+import hu.auxin.ibkrfacade.data.holder.OptionParameters;
+import hu.auxin.ibkrfacade.marketdata.MarketDataService;
+import hu.auxin.ibkrfacade.marketdata.MarketPrice;
+import hu.auxin.ibkrfacade.tws.TwsConnection;
+import hu.auxin.ibkrfacade.tws.TwsErrorCodes;
+import hu.auxin.ibkrfacade.tws.TwsException;
+import hu.auxin.ibkrfacade.tws.TwsRequestRegistry;
+import hu.auxin.ibkrfacade.web.ApiException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import redis.clients.jedis.timeseries.TSElement;
 
+import java.time.Duration;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 /**
- * Contract related operations. The service acts as a bridge between the TWS
- * itself and the other parts of the system,
+ * Contract related operations. The service acts as a bridge between the TWS itself and the other parts of the system,
  * eg. the REST API or the strategy implementations.
  */
+@Slf4j
 @Service
-@Scope("singleton")
 public class ContractManagerService {
 
-    private TWS tws;
+    private static final Duration OPTION_CHAIN_TIMEOUT = Duration.ofSeconds(30);
 
-    private final TimeSeriesHandler timeSeriesHandler;
+    private final TwsConnection connection;
+    private final TwsRequestRegistry requestRegistry;
     private final ContractRepository contractRepository;
+    private final MarketDataService marketDataService;
 
-    @Autowired
-    ContractManagerService(TWS tws, TimeSeriesHandler timeSeriesHandler, ContractRepository contractRepository) {
-        this.tws = tws;
-        this.timeSeriesHandler = timeSeriesHandler;
+    ContractManagerService(TwsConnection connection, TwsRequestRegistry requestRegistry,
+                           ContractRepository contractRepository, MarketDataService marketDataService) {
+        this.connection = connection;
+        this.requestRegistry = requestRegistry;
         this.contractRepository = contractRepository;
+        this.marketDataService = marketDataService;
     }
 
     public List<Contract> searchContract(String search) {
-        TwsResultHolder resultHolder = tws.searchContract(search);
-        if (StringUtils.hasLength(resultHolder.getError())) {
-            throw new RuntimeException();
+        if (!StringUtils.hasText(search)) {
+            throw ApiException.badRequest("INVALID_QUERY", "Search parameter cannot be empty");
         }
-        return (List<Contract>) resultHolder.getResult();
+        return requestRegistry.call(id -> connection.client().reqMatchingSymbols(id, search));
     }
 
     public ContractDetails getContractDetails(Contract contract) {
-        TwsResultHolder resultHolder = tws.requestContractDetails(contract);
-        if (StringUtils.hasLength(resultHolder.getError())) {
-            throw new RuntimeException();
+        List<ContractDetails> details;
+        try {
+            details = requestRegistry.call(id -> connection.client().reqContractDetails(id, contract));
+        } catch (TwsException e) {
+            if (e.getCode() == TwsErrorCodes.NO_SECURITY_DEFINITION) {
+                throw contractNotFound(contract.conid());
+            }
+            throw e;
         }
-        return (ContractDetails) resultHolder.getResult();
+        if (details.isEmpty()) {
+            throw contractNotFound(contract.conid());
+        }
+        if (details.size() > 1) {
+            log.warn("Ambiguous contract definition, {} matches, using the first one", details.size());
+        }
+        return details.get(0);
     }
 
     public int subscribeMarketData(Contract contract) {
-        return subscribeMarketData(contract, false);
+        return subscribeMarketData(contract.conid());
     }
 
-    public int subscribeMarketData(Contract contract, boolean tickByTick) {
-        return tws.subscribeMarketData(contract, tickByTick);
-    }
-
-    /**
-     * Returns the latest available ask and bid price for the given conid
-     * 
-     * @param conid
-     * @return
-     */
-    public PriceHolder getLastPriceByConid(int conid) {
-        ContractHolder contractHolder = contractRepository.findById(conid)
-                .orElseThrow(() -> new RuntimeException("No conid found"));
-        return getLastPriceByContractHolder(contractHolder);
+    public int subscribeMarketData(int conid) {
+        ContractHolder contractHolder = getContractHolder(conid);
+        int tickerId = marketDataService.subscribe(contractHolder.getContract());
+        if (contractHolder.getStreamRequestId() == null || contractHolder.getStreamRequestId() != tickerId) {
+            contractHolder.setStreamRequestId(tickerId);
+            contractRepository.save(contractHolder);
+        }
+        return tickerId;
     }
 
     /**
-     * Returns the latest available ask and bid price for the given Contract
-     * 
-     * @param contract
-     * @return
+     * Returns the latest available bid/ask/last price for the given conid
      */
-    public PriceHolder getLastPriceByContract(Contract contract) {
-        ContractHolder contractHolder = contractRepository.findById(contract.conid())
-                .orElseThrow(() -> new RuntimeException("No Contract found"));
-        return getLastPriceByContractHolder(contractHolder);
+    public MarketPrice getLastPriceByConid(int conid) {
+        return marketDataService.latestPrice(conid);
     }
 
     /**
      * Getting the option chain for an underlying instrument
-     * 
-     * @param underlyingConid
-     * @return
      */
     public Collection<Option> getOptionChainByConid(int underlyingConid) {
         ContractHolder underlying = getContractHolder(underlyingConid);
-        return tws.requestForOptionChain(underlying.getContract());
+        Contract contract = underlying.getContract();
+        List<OptionParameters> parameters = requestRegistry.call(id -> connection.client().reqSecDefOptParams(
+                id, contract.symbol(), "", contract.secType().getApiString(), contract.conid()), OPTION_CHAIN_TIMEOUT);
+
+        Set<Option> optionChain = new HashSet<>();
+        for (OptionParameters parameter : parameters) {
+            for (Types.Right right : List.of(Types.Right.Call, Types.Right.Put)) {
+                for (String expiration : parameter.expirations()) {
+                    for (Double strike : parameter.strikes()) {
+                        String optionSymbol = contract.symbol() + " " + expiration + " " + right;
+                        optionChain.add(new Option(optionSymbol, expiration, strike, right));
+                    }
+                }
+            }
+        }
+        underlying.setOptionChain(optionChain);
+        contractRepository.save(underlying);
+        return optionChain;
     }
 
     /**
-     * Returns the latest available ask and bid price for the given ContractHolder
-     * 
-     * @param contractHolder
-     * @return
-     */
-    public PriceHolder getLastPriceByContractHolder(ContractHolder contractHolder) {
-        TSElement bidTsElement = timeSeriesHandler.getInstance()
-                .tsGet(TimeSeriesHandler.STREAM_STRING + contractHolder.getStreamRequestId() + ":" + TickType.BID);
-        TSElement askTsElement = timeSeriesHandler.getInstance()
-                .tsGet(TimeSeriesHandler.STREAM_STRING + contractHolder.getStreamRequestId() + ":" + TickType.ASK);
-        return new PriceHolder(bidTsElement.getValue(), askTsElement.getValue());
-    }
-
-    /**
-     * Checking in Redis if the requested Contract already has a data stream.
-     * If so, return with the already stored ContractHolder instead of creating a
-     * new one.
-     * 
-     * @param contract
-     * @return
-     */
-    public ContractHolder getContractHolder(Contract contract) {
-        return getContractHolder(contract.conid());
-    }
-
-    /**
-     * Checking in Redis if the requested Contract already has a data stream.
-     * If so, return with the already stored ContractHolder instead of creating a
-     * new one.
-     * 
-     * @param conid
-     * @return
+     * Returns the ContractHolder from Redis if the contract is already known. Otherwise, it's requested from TWS by
+     * conid and saved to Redis.
+     *
+     * @throws ApiException with 404 if there's no such contract
      */
     public ContractHolder getContractHolder(int conid) {
-        Optional<ContractHolder> contractHolder = contractRepository.findById(conid);
-        return contractHolder.orElseGet(() -> {
-            TwsResultHolder<ContractHolder> twsResult = tws.requestContractByConid(conid);
-            if (!StringUtils.hasLength(twsResult.getError())) {
-                contractRepository.save(twsResult.getResult());
-                return twsResult.getResult();
-            }
-            throw new RuntimeException(twsResult.getError());
+        return contractRepository.findById(conid).orElseGet(() -> {
+            Contract contract = new Contract();
+            contract.conid(conid);
+            ContractDetails details = getContractDetails(contract);
+            ContractHolder contractHolder = new ContractHolder(details.contract(), details);
+            contractRepository.save(contractHolder);
+            return contractHolder;
         });
+    }
+
+    private static ApiException contractNotFound(int conid) {
+        return ApiException.notFound("CONTRACT_NOT_FOUND", "No contract found for conid " + conid);
     }
 }

@@ -3,3 +3,7 @@
 /out/
 /target/
 /ibkrfacade.iml
+
+# local secrets
+.env
+*.local.*

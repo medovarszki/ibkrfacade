@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.interactivebrokers</groupId>
+    <artifactId>tws-api</artifactId>
+    <version>10.50.01</version>
+    <name>Interactive Brokers TWS API (Java client)</name>
+    <description>Repackaged unmodified from the official IBKR "stable" installer (API_Version=1050.02)</description>
+    <url>https://interactivebrokers.github.io/</url>
+    <licenses>
+        <license>
+            <name>GNU General Public License v3.0</name>
+            <url>https://www.gnu.org/licenses/gpl-3.0.txt</url>
+        </license>
+    </licenses>
+    <dependencies>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>4.29.5</version>
+        </dependency>
+    </dependencies>
+</project>

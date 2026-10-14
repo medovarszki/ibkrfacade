@@ -1,76 +1,78 @@
 package hu.auxin.ibkrfacade.strategy;
 
 import com.ib.client.TickType;
-import com.ib.client.Types;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
-import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
-import hu.auxin.ibkrfacade.data.holder.PriceHolder;
+import hu.auxin.ibkrfacade.marketdata.MarketPrice;
+import hu.auxin.ibkrfacade.order.OrderKind;
+import hu.auxin.ibkrfacade.order.OrderService;
+import hu.auxin.ibkrfacade.order.OrderSide;
+import hu.auxin.ibkrfacade.order.PlaceOrderRequest;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
 import hu.auxin.ibkrfacade.service.PositionManagerService;
+import hu.auxin.ibkrfacade.tws.TwsConnectedEvent;
 import hu.auxin.ibkrfacade.twssample.ConId;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
 import redis.clients.jedis.timeseries.TSElement;
 
-import org.springframework.context.annotation.DependsOn;
-import org.springframework.context.annotation.Scope;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Sample trading strategy, don't even think about using it real conditions!
+ * <p>
+ * Disabled by default, enable it with ibkr.strategies.enabled=true. Even then the trading methods are not scheduled,
+ * uncomment the @Scheduled annotations to make it trade. Orders go through the same safety checks (paper/live guard,
+ * market price check) as the REST API.
  */
 @Slf4j
 @Component
-@DependsOn("TWS")
-@Scope("singleton")
+@ConditionalOnProperty(name = "ibkr.strategies.enabled", havingValue = "true")
 public class TrendTradingStrategy {
 
-    private TimeSeriesHandler timeSeriesHandler;
-    private OrderManagerService orderManagerService;
-    private PositionManagerService positionManagerService;
-    private ContractManagerService contractManagerService;
+    private static final int APPLE = ConId.AAPL;
 
-    private ContractHolder apple;
+    private final TimeSeriesHandler timeSeriesHandler;
+    private final OrderService orderService;
+    private final OrderManagerService orderManagerService;
+    private final PositionManagerService positionManagerService;
+    private final ContractManagerService contractManagerService;
 
-    public TrendTradingStrategy(OrderManagerService orderManagerService, PositionManagerService positionManagerService,
-            TimeSeriesHandler timeSeriesHandler, ContractManagerService contractManagerService) {
+    public TrendTradingStrategy(OrderService orderService, OrderManagerService orderManagerService,
+                                PositionManagerService positionManagerService, TimeSeriesHandler timeSeriesHandler,
+                                ContractManagerService contractManagerService) {
+        this.orderService = orderService;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.contractManagerService = contractManagerService;
         this.timeSeriesHandler = timeSeriesHandler;
     }
 
-    @PostConstruct
-    private void init() {
-        this.apple = contractManagerService.getContractHolder(ConId.AAPL);
-        int streamId = contractManagerService.subscribeMarketData(apple.getContract());
-        this.apple.setStreamRequestId(streamId); // already saved to the contract in Redis, but here we need to add
-                                                 // because the stream was started later than the request
+    @EventListener
+    public void onConnected(TwsConnectedEvent event) {
+        if (!event.reconnect()) {
+            contractManagerService.subscribeMarketData(APPLE);
+        }
     }
 
-//    @Scheduled(cron = "0/10 * 9-16 * * ?", zone = "America/New_York") // job will run every 10 seconds (0/10) during the hours of 9am to 4pm
+    //    @Scheduled(cron = "0/10 * 9-16 * * ?", zone = "America/New_York") // job will run every 10 seconds (0/10) during the hours of 9am to 4pm
     private synchronized void checkForTradingSignal() {
-        if (apple == null) {
-            return;
-        }
-
-        if (!orderManagerService.getActiveOrdersByContract(apple.getContract()).isEmpty()) {
+        if (!orderManagerService.getActiveOrdersByConid(APPLE).isEmpty()) {
             log.info("We already have an open order");
-        } else if (positionManagerService.getPositionByContract(apple.getContract()) != null) {
+        } else if (positionManagerService.getQuantityByConid(APPLE) != null) {
             log.info("We already have an open position");
         } else {
-            long now = new Date().getTime();
+            long now = System.currentTimeMillis();
             long sampleLength = 60 * 1000; // take 1 minutes of data
 
             try {
-                java.util.List<TSElement> bidArray = timeSeriesHandler.getInstance()
-                        .tsRange(("stream:" + apple.getStreamRequestId() + ":" + TickType.BID), now - sampleLength, now);
+                List<TSElement> bidArray = timeSeriesHandler.getInstance()
+                        .tsRange(TimeSeriesHandler.key(APPLE, TickType.BID), now - sampleLength, now);
 
                 TSElement firstTsElement = bidArray.get(0);
                 TSElement lastTsElement = bidArray.get(bidArray.size() - 1);
@@ -79,8 +81,7 @@ public class TrendTradingStrategy {
                     log.info("Change in time window: {}%", changePercentage);
                     if (Math.abs(changePercentage) > 0.05) { // rate of change in selected time window must be at least
                         log.info("BUY ORDER");
-                        orderManagerService.placeMarketOrder(
-                                contractManagerService.getContractHolder(ConId.AAPL).getContract(), Types.Action.BUY, 10);
+                        place(OrderSide.BUY, BigDecimal.TEN, OrderKind.MKT, null, null);
                     }
                 }
             } catch (Exception e) {
@@ -89,35 +90,38 @@ public class TrendTradingStrategy {
         }
     }
 
-//    @Scheduled(fixedRate = 5, initialDelay = 15, timeUnit = TimeUnit.SECONDS)
+    //    @Scheduled(fixedRate = 5, initialDelay = 15, timeUnit = TimeUnit.SECONDS)
     private synchronized void handleClose() {
-        PositionHolder positionHolder = positionManagerService.getPositionByContract(apple.getContract());
-        if (positionHolder != null) {
-            // we have an open position
-            boolean isShort = positionHolder.getQuantity() < 0;
-            PriceHolder lastPrice = contractManagerService.getLastPriceByContract(apple.getContract());
+        List<PositionHolder> positions = positionManagerService.getPositionsByConid(APPLE);
+        if (positions.isEmpty()) {
+            return;
+        }
+        PositionHolder position = positions.get(0);
+        boolean isShort = position.quantity().signum() < 0;
+        MarketPrice lastPrice = contractManagerService.getLastPriceByConid(APPLE);
+        if (lastPrice.bid() == null) {
+            return;
+        }
 
-            double maxChange = positionHolder.getAvgPrice() * 0.01; // max allowed loss (0.25%)
-            double stopLoss = isShort ? positionHolder.getAvgPrice() + maxChange
-                    : positionHolder.getAvgPrice() - maxChange;
+        double maxChange = position.avgCost() * 0.01; // max allowed loss
+        double stopLoss = isShort ? position.avgCost() + maxChange : position.avgCost() - maxChange;
+        OrderSide closingSide = isShort ? OrderSide.BUY : OrderSide.SELL;
 
-            if (orderManagerService.getActiveOrdersByContract(apple.getContract()).isEmpty()) {
-                // no active order
-                if (lastPrice.getBid() < stopLoss) {
-                    // close position on market price, when threshold reached
-                    orderManagerService.placeMarketOrder(apple.getContract(),
-                            isShort ? Types.Action.BUY : Types.Action.SELL, positionHolder.getQuantity());
-                } else if (lastPrice.getBid() > positionHolder.getAvgPrice() + maxChange) {
-                    // we have some unrealized gains, set a stop loss
-                    double activationPrice = lastPrice.getBid() - stopLoss;
-                    double limitPrice = lastPrice.getBid() - stopLoss - 0.5;
-                    orderManagerService.placeStopLimitOrder(apple.getContract(),
-                            isShort ? Types.Action.BUY : Types.Action.SELL, positionHolder.getQuantity(),
-                            activationPrice, limitPrice);
-                }
-            } else {
-                // already have an active order
+        if (orderManagerService.getActiveOrdersByConid(APPLE).isEmpty()) {
+            if (lastPrice.bid() < stopLoss) {
+                // close position on market price, when threshold reached
+                place(closingSide, position.quantity().abs(), OrderKind.MKT, null, null);
+            } else if (lastPrice.bid() > position.avgCost() + maxChange) {
+                // we have some unrealized gains, set a stop loss
+                double activationPrice = lastPrice.bid() - stopLoss;
+                double limitPrice = lastPrice.bid() - stopLoss - 0.5;
+                place(closingSide, position.quantity().abs(), OrderKind.STP_LMT, limitPrice, activationPrice);
             }
         }
+    }
+
+    private void place(OrderSide side, BigDecimal quantity, OrderKind kind, Double limitPrice, Double stopPrice) {
+        orderService.place(new PlaceOrderRequest("trend-" + UUID.randomUUID(), APPLE, side, quantity, kind,
+                limitPrice, stopPrice, null, null, null));
     }
 }
