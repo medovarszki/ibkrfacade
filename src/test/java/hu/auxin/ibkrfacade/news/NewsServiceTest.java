@@ -41,7 +41,7 @@ class NewsServiceTest {
     void headlinesOfEveryProviderByDefault() {
         doAnswer(invocation -> {
             int id = invocation.getArgument(0);
-            service.onHistoricalNews(id, "2026-10-14 13:30:00.0", "BRFG", "BRFG$1", "Apple beats");
+            service.onHistoricalNews(id, "2026-10-14 13:30:00.0", "BRFG", "BRFG$1", "{A:800015:L:en:K:n/a:C:0.97}Apple beats");
             service.onHistoricalNewsEnd(id);
             return null;
         }).when(client).reqHistoricalNews(anyInt(), eq(265598), eq("BRFG+DJNL"), eq(""), eq(""), eq(5), any());

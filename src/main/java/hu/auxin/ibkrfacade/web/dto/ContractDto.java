@@ -51,11 +51,11 @@ public record ContractDto(
     public static ContractDto of(Contract c, ContractDetails d, Integer streamRequestId) {
         return new ContractDto(c.conid(), c.symbol(), c.getSecType(), empty(c.exchange()), empty(c.primaryExch()),
                 c.currency(), empty(c.localSymbol()), empty(c.tradingClass()), empty(c.multiplier()),
-                empty(c.lastTradeDateOrContractMonth()), c.strike() == 0 ? null : c.strike(), empty(c.getRight()),
+                empty(c.lastTradeDateOrContractMonth()), price(c.strike()), empty(c.getRight()),
                 empty(c.description()),
                 d == null ? null : empty(d.longName()),
                 d == null ? null : empty(d.timeZoneId()),
-                d == null || d.minTick() == 0 ? null : d.minTick(),
+                d == null ? null : price(d.minTick()),
                 d == null ? null : Decimals.toBigDecimal(d.minSize()),
                 d == null ? null : Decimals.toBigDecimal(d.sizeIncrement()),
                 d == null ? null : empty(d.industry()),
@@ -65,6 +65,13 @@ public record ContractDto(
                 d == null ? null : empty(d.tradingHours()),
                 d == null ? null : empty(d.liquidHours()),
                 streamRequestId);
+    }
+
+    /**
+     * TWS sends 0 or Double.MAX_VALUE when the value is not set (eg. the strike of a stock)
+     */
+    private static Double price(double value) {
+        return value == 0 ? null : Decimals.orNull(value);
     }
 
     private static String empty(String value) {

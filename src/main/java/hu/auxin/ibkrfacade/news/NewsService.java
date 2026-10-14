@@ -20,6 +20,11 @@ public class NewsService {
 
     private static final Pattern PROVIDER_CODES = Pattern.compile("[A-Za-z0-9_]+(\\+[A-Za-z0-9_]+)*");
 
+    /**
+     * TWS prefixes the headlines with metadata, eg. "{A:800015:L:en:K:n/a:C:0.97}Apple beats"
+     */
+    private static final Pattern HEADLINE_METADATA = Pattern.compile("^\\{[^}]*}\\s*");
+
     private final TwsConnection connection;
     private final TwsRequestRegistry requestRegistry;
 
@@ -83,7 +88,8 @@ public class NewsService {
     }
 
     public void onHistoricalNews(int requestId, String time, String providerCode, String articleId, String headline) {
-        requestRegistry.addItem(requestId, new NewsHeadline(time, providerCode, articleId, headline));
+        requestRegistry.addItem(requestId, new NewsHeadline(time, providerCode, articleId,
+                headline == null ? null : HEADLINE_METADATA.matcher(headline).replaceFirst("")));
     }
 
     public void onHistoricalNewsEnd(int requestId) {

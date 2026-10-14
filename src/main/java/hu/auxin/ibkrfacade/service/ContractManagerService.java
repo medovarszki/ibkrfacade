@@ -20,6 +20,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -116,7 +117,11 @@ public class ContractManagerService {
         }
         underlying.setOptionChain(optionChain);
         contractRepository.save(underlying);
-        return optionChain;
+        return optionChain.stream()
+                .sorted(Comparator.comparing(Option::getExpiration)
+                        .thenComparingDouble(Option::getStrike)
+                        .thenComparing(Option::getRight))
+                .toList();
     }
 
     /**
