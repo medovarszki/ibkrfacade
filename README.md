@@ -1,88 +1,193 @@
 # IBKR Facade
-## Interactive Brokers API wrapper and trading toolbox 
-This project is built around the [Interactive Broker's TWS library](https://interactivebrokers.github.io/tws-api/) for Java. If you have a TWS or IB Gateway running, you can use this as a market data source for time series analysis, REST gateway to the market, or even as a trading bot framework.
+## Interactive Brokers API wrapper and trading toolbox
 
-The IBKR facade based on Spring Boot so can leverage the capabilities provided by the Spring Framework as well which can be really useful for implementing automated trading strategies. 
+This project is built around the [Interactive Brokers TWS API](https://interactivebrokers.github.io/tws-api/) for Java.
+With a running TWS or IB Gateway it works as a REST gateway to the market, a market data source for time series
+analysis (Redis TimeSeries) or a trading bot framework. It's based on Spring Boot 4 and Java 21+.
+
+It is designed to be the broker layer of an agent based system: an internal service, reachable only on a private
+Docker network, in front of a containerized IB Gateway (paper account by default).
 
 **In this project you'll find:**
 
-- The basic functions of the TWS API exposed to a Rest API
-    - Searching in Interactive Brokers' instrument master data
-    - Fetching the option chain
-    - Subscribe to market data for certain instruments, and store the time series data in Redis
-    - Create and manage orders
-    - Retrieve open positions
-- Market data streamed into a Redis server from where you can do it whatever you want (eg.: save if for further analytics; generate OHLC data automatically with [built-in compaction policy](https://redis.io/docs/stack/timeseries/configuration/#compaction_policy-policy); using as a data source by creating a pub-sub message queue; build historical datasets, etc.)
-- Built-in sample trading strategy (not a real working strategy, just an example of course), which is based on periodical time series analysis looking for trading signal and placing orders.
+- The TWS API exposed to a REST API ([OpenAPI spec](docs/openapi.yaml), Swagger UI at `/ibkr/swagger-ui/index.html`)
+    - instrument search, contract details, option chain
+    - market data subscription and latest prices, historical OHLCV bars
+    - account summary (NAV, cash, buying power, margin), positions with market value and P&L
+    - **idempotent** order placement, order status with fills and commissions, cancellation
+    - news providers, headlines and articles (if the account has news subscriptions)
+- Safety by default: no order on a live account unless explicitly allowed, no order without a recent market price,
+  optional read / write API tokens, sample strategies disabled
+- Market data streamed into Redis TimeSeries
+- Docker image and a Docker Compose stack with IB Gateway (paper, automatic login and daily restart by IBC) and Redis 8
+- Structured JSON logs with trace id propagation, health endpoint with the TWS connection state
 
+## Quick start with Docker Compose (paper account)
 
-## Prerequisites
-As step zero, you need an account at Interactive Brokers.
+Prerequisites: Docker with Compose v2, an IBKR account with a paper trading user.
 
-### TWS or IB gateway
-[Trading Workstation](https://www.interactivebrokers.com/en/index.php?f=14099#tws-software) (TWS) or [IB Gateway](https://www.interactivebrokers.com/en/?f=/en/trading/ibgateway-stable.php) has to be installed in order to provide access to Interactive Brokers' infrastructure. If you are using TWS, make sure that the API connection is enabled, and if you want to placing orders through the library, the connection is not restricted to "read-only".
+```bash
+cp .env.example .env
+# edit .env: TWS_USERID / TWS_PASSWORD of the paper user, REDIS_PASSWORD,
+# IBKR_SECURITY_READ_TOKEN / IBKR_SECURITY_WRITE_TOKEN (eg. openssl rand -hex 32)
+docker compose up -d --build
+docker compose logs -f ibkrfacade
+```
 
-**See more:** [TWS API initial setup](https://interactivebrokers.github.io/tws-api/initial_setup.html)
+The stack:
 
-### Market data subscription
-In order to access market data you'll need an account at Interactive Brokers with subscription to those markets and instruments you need. If you want to use a paper trading account first (which I highly recommend) instead of your live account, you need to share your market subscriptions between your accounts.
+| Service | Image | Notes |
+|---|---|---|
+| `ib-gateway` | `ghcr.io/gnzsnz/ib-gateway:10.50.1f` | IB Gateway + IBC, `TRADING_MODE=paper`, daily restart (`AUTO_RESTART_TIME`), API on `ib-gateway:4004` (paper) |
+| `redis` | `redis:8.8.3` | Redis 8 has RedisTimeSeries built in, password protected, persistent volume |
+| `ibkrfacade` | built from `Dockerfile` | REST API on `ibkrfacade:8082/ibkr`, non-root, health check |
 
-**See:** [Sharing market data subscription](https://interactivebrokers.github.io/tws-api/market_data.html#paper_sharing)
+Nothing is published to the host: the services share the internal `ibkr-backend` network (no internet access), only
+the gateway has an extra network to reach the IB servers. Other containers (eg. an MCP server) join the
+`ibkr-backend` network and call `http://ibkrfacade:8082/ibkr`.
 
-### TWS API
-You have to download the TWS API from https://interactivebrokers.github.io for Java. It contains a TwsApi.jar file which you need to have on your classpath. (You can find a working version of it in the /lib folder of this repository.) This is a legacy JAR maintained by Interactive Brokers and you cannot find it in the central Maven repository, so if you want to build this project with Maven, you need to manually add it to your local artifact repository (see pom.xml dependencies section), or make it available on the classpath some other way.
+To call the API from the host during development, publish the REST port on `127.0.0.1`:
 
-### Redis server
-Redis is a powerful and extremely fast tool for storing market data. If you have a Redis server with RedisTimeSeries extension up and running, you can configure its access through the application.properties file, then the library will send the market data to the Redis for the subscribed instruments.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.expose.yml up -d
+curl -H "Authorization: Bearer $IBKR_SECURITY_READ_TOKEN" http://localhost:8082/ibkr/account/summary
+curl http://localhost:8082/ibkr/actuator/health
+```
 
-If you don't want to install Redis, you can try [Redis Cloud](https://redis.com/try-free/) for free.
+The facade connects automatically when the gateway is ready, and reconnects after the daily restart.
+Secrets are only read from the environment (`.env` is git-ignored), nothing is stored in the image. For the gateway
+password you can also use Docker secrets (`TWS_PASSWORD_FILE`), see the
+[ib-gateway image docs](https://github.com/gnzsnz/ib-gateway-docker#credentials).
 
-## How to use
-1. Checkout the project
-2. Add the `lib/TwsApi.jar` to the classpath from your IDE or alternatively publish it to a maven repository. Don't forget to modify `pom.xml` if needed!
-3. Check your `application.properties` for:
-   - TWS or IB gateway host and port number
-   - URL settings for REST API
-   - Redis server connection 
-4. Build the project with maven
-5. If you have your setup up and running, IBKR Facade should connect to Interactive Brokers automatically.
+Paper accounts often have no live market data. Share the subscriptions of the live account with the paper account
+([how to](https://interactivebrokers.github.io/tws-api/market_data.html#paper_sharing)), or set
+`IBKR_MARKET_DATA_TYPE=3` for delayed data.
 
-You will be able efficiently use the software only if you are familiar with the terminology and concepts used by Interactive Brokers, especially [Contracts](https://interactivebrokers.github.io/tws-api/contracts.html) and `conid` as the unique IB contract identifier.
+## Configuration
 
-**See:** [Search Interactive Brokers Contract Database](https://www.interactivebrokers.com/en/index.php?f=463) 
+Every property can be set through environment variables (Spring relaxed binding). The most important ones:
 
-## Use cases
+| Environment variable | Default | Description |
+|---|---|---|
+| `IBKR_TWS_HOST` / `IBKR_TWS_PORT` | `localhost` / `4002` | TWS / IB Gateway API endpoint (compose: `ib-gateway` / `4004`) |
+| `IBKR_TWS_CLIENT_ID` | `1` | API client id, unique per gateway |
+| `IBKR_ALLOW_LIVE` | `false` | Orders are rejected (403 `LIVE_TRADING_DISABLED`) on a live account unless `true` |
+| `IBKR_STRATEGIES_ENABLED` | `false` | Loads the sample strategies (`SampleSaver`, `TrendTradingStrategy`) |
+| `IBKR_MARKET_DATA_TYPE` | `1` | 1 live, 2 frozen, 3 delayed, 4 delayed frozen |
+| `IBKR_ORDER_MAX_QUOTE_AGE` | `15m` | An order needs a bid/ask not older than this (`0` disables the age check) |
+| `IBKR_ORDER_QUOTE_WAIT` | `3s` | How long to wait for the first quote of a not yet subscribed instrument |
+| `IBKR_ORDER_IDEMPOTENCY_TTL` | `30d` | How long a `client_order_id` is kept in Redis |
+| `IBKR_SECURITY_ENABLED` | `false` (compose: `true`) | Bearer token authentication |
+| `IBKR_SECURITY_READ_TOKEN` / `IBKR_SECURITY_WRITE_TOKEN` | | Read-only and read-write tokens (min. 16 characters) |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / | Redis connection |
+| `REDIS_DEFAULT_RETENTION` | `3600000` | Retention of the price time series (ms) |
+| `SERVER_PORT` | `8082` | REST port (context path `/ibkr`) |
+| `LOGGING_STRUCTURED_FORMAT_CONSOLE` | (image: `ecs`) | JSON logs: `ecs`, `logstash` or `gelf` |
 
-### REST API
-Every basic function needed for using the system is exposed through a REST API, such as:
-- Contract search
-- Subscription to the market feed for certain contracts
-- Getting price information
-- Placing orders
-- Getting positions
+See [application.properties](src/main/resources/application.properties) for the full list.
 
-You can change the port number (8082 by default) and context-path (default is `/ibkr`) from the `application.properties` file.
+## REST API
 
-The endpoints are documented using [Swagger OpenAPI](http://swagger.io) annotations. After you started the application you should find the documentation under the following URL: http://localhost:8082/ibkr/swagger-ui/
+All paths are relative to `/ibkr`. Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details
+with a machine readable `code`:
 
-### Market data analysis (Redis TimeSeries)
-If you have your Redis ready you can subscribe to market data feed of any instrument available on Interactive Brokers through your brokerage account.
+```json
+{"status": 422, "title": "Unprocessable Content", "code": "MARKET_DATA_UNAVAILABLE", "detail": "No market price (bid/ask) for conid 265598, no order is placed"}
+```
 
-From Java, you can use the `ContractManagerService.subscribe()` method or via HTTP you can use the `/subscribe` endpoint. If everything works as expected, the Contract itself should be saved to Redis under the conid of the Contract as key, and two time series should be created for storing the price information.
+| Method | Path | Description |
+|---|---|---|
+| GET | `/search?query=` | Instrument search |
+| GET | `/contract/{conid}` | Contract details (unknown conids are resolved through TWS, 404 if there's no such contract) |
+| GET | `/subscribe/{conid}` | Market data subscription (stream into Redis) |
+| GET | `/price/{conid}` | Latest bid / ask / last with timestamps |
+| GET | `/history/{conid}?duration=1 M&barSize=1 day&whatToShow=TRADES&useRth=true` | OHLCV bars, times in the exchange time zone |
+| GET | `/optionChain/{conid}` | Option chain of an underlying |
+| GET | `/account/summary?account=` | NAV, cash, available funds, buying power, margin requirements, currency, timestamp |
+| GET | `/positions` | Positions with average cost, market price, market value, unrealized / realized P&L |
+| POST | `/order` | Place an order (**write token**) |
+| GET | `/orders`, `/orders?client_order_id=`, `/orders/active`, `/orders/{orderId}` | Order status, filled quantity, average fill price, commission, executions |
+| DELETE | `/orders/{orderId}` | Cancel an order (**write token**) |
+| GET | `/news/providers`, `/news/{conid}`, `/news/article/{provider}/{articleId}` | News |
+| GET | `/actuator/health` | Health including the TWS connection (`tws`) and Redis, always public |
 
-If you want to change or extend the functionality of this, you need to extend the `TimeSeriesHandler` class. You can utilize the full power of Redis from calculating OHLC data automatically, or using it as a pub/sub service, it's all up to you. 
+### Orders
 
-Once you have subscribed to an instrument, the price stream (bid/ask changes) will be written into the Redis by the following pattern:
-- A `ContractHolder` will be created and saved by it's `conid` used as a key
-- The `ContractHolder` contains the `Contract` descriptor provided by Interactive Brokers
-- The `ContractHolder` has a `streamRequestId` which is used for identifying the communication "stream" with the TWS itself. When you send a request to Interactive Brokers through TWS with a unique number (the IB documentation refers to this identifier as streamId or tickId), this number will be used in the response method calls. We save this number into the `ContractHolder` as `streamRequestId`.
-- The time series will be available under the following key format: `stream:[streamRequestId]:[BID/ASK]` so basically two series are stored per subscribed instrument: one for the bids and one for the asks.
+```bash
+curl -X POST http://localhost:8082/ibkr/order \
+  -H "Authorization: Bearer $IBKR_SECURITY_WRITE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"client_order_id": "auxin-20261014-0001", "conid": 265598, "action": "BUY", "quantity": 10,
+       "order_type": "LMT", "limit_price": 150.25, "tif": "DAY"}'
+```
 
-**See:** [RedisTimeSeries](https://redis.io/docs/stack/timeseries)
+The response contains the IBKR `order_id`, the `status` and the fill information. Order types: `MKT`, `LMT`
+(`limit_price`), `STP` (`stop_price`), `STP_LMT` (both). Time in force: `DAY` (default), `GTC`, `IOC`, `FOK`, `OPG`.
 
-### Trading strategy automation
-Since you have hands-on market data, with the methods of `OrderManagerService`, `ContractManagerService` and `PositionManagerService` there is no predetermined way how to implement a trading strategy, the only limit is your imagination :)  
+Safety rules of `POST /order`:
 
-You can find an example implementation in the `strategy` package, which periodically checks the prices of Apple stock from Redis looking for a trading signal. Once the trade performed (you have an open position) it checks the price movements for a possible exit.
+- **Idempotency.** `client_order_id` is mandatory and is stored in the IBKR `orderRef` field. It is reserved in Redis
+  (`SET NX`) before the order is sent, so an order can't go out twice, even with concurrent requests or after a
+  restart. A repeated request returns the existing order with HTTP 200 and `"duplicate": true`. The same id with
+  different parameters is rejected with 409 `CLIENT_ORDER_ID_REUSED`. If the id is reserved but TWS doesn't know
+  the order (eg. the facade crashed while sending it), the status is `Unknown` and the order is never re-sent: use a
+  new `client_order_id`. A request rejected by a safety check (4xx/503) does not reserve the id.
+- **Paper / live.** The account type is logged at connection (`DU...` accounts are paper). Orders on a live account
+  are rejected unless `IBKR_ALLOW_LIVE=true`; while the account type is unknown, orders are rejected with 503.
+- **Market price.** Without a bid or ask not older than `IBKR_ORDER_MAX_QUOTE_AGE` the order is rejected with
+  422 `MARKET_DATA_UNAVAILABLE` (the instrument is subscribed automatically).
+- **Unknown contract.** 404 `CONTRACT_NOT_FOUND`.
+- **No connection / Redis down.** 503 `TWS_NOT_CONNECTED` / `IDEMPOTENCY_STORE_UNAVAILABLE`, nothing is sent.
 
-**Important: This is not a real strategy. Don't even think about using it real conditions!**
+Order statuses are the IBKR ones (`PendingSubmit`, `PreSubmitted`, `Submitted`, `Filled`, `Cancelled`, `Inactive`,
+...) plus `Rejected` (TWS rejected the order, see `error_code` / `error_message`) and `Unknown`.
+
+### Authentication
+
+With `IBKR_SECURITY_ENABLED=true` every request needs `Authorization: Bearer <token>`:
+
+- read token: `GET` endpoints and `POST /price`
+- write token: everything, including `POST /order` and `DELETE /orders/{orderId}`
+
+`/actuator/health` and the API docs (unless `IBKR_SECURITY_PUBLIC_DOCS=false`) are public.
+
+## Observability
+
+- JSON logs (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`, default in the image).
+- The trace id of the caller is taken from the W3C `traceparent` header, or `X-Trace-Id`, or generated; it is in
+  every log line of the request (`trace_id`) and returned in the `X-Trace-Id` response header.
+- `/actuator/health` is DOWN while the TWS connection is not ready or Redis is not reachable; the `tws` component
+  shows the connection details and the account type. `/actuator/health/liveness` and `/readiness` are available too.
+- Optional OpenTelemetry: mount the [OpenTelemetry Java agent](https://opentelemetry.io/docs/zero-code/java/agent/)
+  and set `JAVA_TOOL_OPTIONS=-javaagent:...` (see the comments in `docker-compose.yml`).
+
+## Market data in Redis
+
+Subscribed instruments are streamed into Redis TimeSeries under `stream:[conid]:[BID|ASK|LAST]`, labeled with the
+conid and the symbol. Contracts are cached as `contract:[conid]` hashes. You can use the full power of Redis on this
+data (compaction rules for OHLC, pub/sub, etc.), see `TimeSeriesHandler`.
+
+## Building and running without Docker
+
+Requirements: JDK 21+ and Maven. The TWS API jar is vendored in [lib](lib/README.md), no manual step needed.
+
+```bash
+mvn package                      # build and unit tests
+REDIS_IT=true REDIS_PORT=6379 mvn test -Dtest=ContractRepositoryRedisIT   # optional, needs a running Redis
+java -jar target/ibkrfacade-1.0-SNAPSHOT.jar --ibkr.tws.port=4002 --spring.data.redis.host=localhost
+```
+
+You need a running TWS or IB Gateway with the API enabled
+([initial setup](https://interactivebrokers.github.io/tws-api/initial_setup.html)) and a Redis with RedisTimeSeries.
+
+## Trading strategy automation
+
+The `strategy` package contains a sample: it watches the price of Apple in Redis looking for a signal and places
+orders through the same safety checks as the REST API. The samples are not loaded unless
+`IBKR_STRATEGIES_ENABLED=true`, and even then the trading methods are not scheduled.
+
+**Important: This is not a real strategy. Don't even think about using it in real conditions!**
+
+## License note
+
+The TWS API is released by Interactive Brokers under the GNU GPL v3 from version 10.49
+(see [lib/README.md](lib/README.md)).

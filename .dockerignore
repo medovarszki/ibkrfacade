@@ -1,0 +1,6 @@
+# Only pom.xml, lib/ and src/ are needed for the image build
+*
+!pom.xml
+!lib/
+!src/
+src/test/resources/*.local.*

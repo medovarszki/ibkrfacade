@@ -1,0 +1,13 @@
+# Optional override: publishes the REST API to the docker host only (127.0.0.1), eg. for development.
+#   docker compose -f docker-compose.yml -f docker-compose.expose.yml up -d
+# A port can't be published from an internal network, so the facade joins an extra (non-internal) network.
+services:
+  ibkrfacade:
+    ports:
+      - "127.0.0.1:${IBKRFACADE_HOST_PORT:-8082}:8082"
+    networks:
+      - backend
+      - edge
+
+networks:
+  edge:

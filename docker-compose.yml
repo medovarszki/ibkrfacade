@@ -1,0 +1,87 @@
+# Development stack: IB Gateway (paper) + Redis 8 + ibkrfacade.
+#
+#   cp .env.example .env   # fill in the credentials and tokens
+#   docker compose up -d --build
+#
+# Nothing is published to the host. The REST API is reachable for other containers on the "ibkr-backend" network
+# at http://ibkrfacade:8082/ibkr (eg. the Auxin MCP server). To reach it from the host, add the override:
+#   docker compose -f docker-compose.yml -f docker-compose.expose.yml up -d
+name: ibkrfacade
+
+services:
+  ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:10.50.1f
+    restart: unless-stopped
+    environment:
+      TWS_USERID: ${TWS_USERID:?set TWS_USERID in .env}
+      TWS_PASSWORD: ${TWS_PASSWORD:?set TWS_PASSWORD in .env}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      READ_ONLY_API: "no"
+      TWS_ACCEPT_INCOMING: accept
+      BYPASS_WARNING: "yes"
+      AUTO_RESTART_TIME: ${AUTO_RESTART_TIME:-11:45 PM}
+      TWOFA_TIMEOUT_ACTION: restart
+      RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
+      EXISTING_SESSION_DETECTED_ACTION: primary
+      TIME_ZONE: ${TIME_ZONE:-Etc/UTC}
+      TZ: ${TIME_ZONE:-Etc/UTC}
+      VNC_SERVER_PASSWORD: ${VNC_SERVER_PASSWORD:-}
+    networks:
+      - backend
+      - egress   # the gateway must reach the IB servers
+
+  redis:
+    image: redis:8.8.3
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+  ibkrfacade:
+    build: .
+    image: ibkrfacade:local
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      ib-gateway:
+        condition: service_started
+    environment:
+      IBKR_TWS_HOST: ib-gateway
+      IBKR_TWS_PORT: ${IBKR_TWS_PORT:-4004}
+      IBKR_TWS_CLIENT_ID: ${IBKR_TWS_CLIENT_ID:-1}
+      IBKR_ALLOW_LIVE: ${IBKR_ALLOW_LIVE:-false}
+      IBKR_MARKET_DATA_TYPE: ${IBKR_MARKET_DATA_TYPE:-1}
+      IBKR_SECURITY_ENABLED: ${IBKR_SECURITY_ENABLED:-true}
+      IBKR_SECURITY_READ_TOKEN: ${IBKR_SECURITY_READ_TOKEN:-}
+      IBKR_SECURITY_WRITE_TOKEN: ${IBKR_SECURITY_WRITE_TOKEN:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      # Optional OpenTelemetry Java agent: mount the agent jar and uncomment
+      # JAVA_TOOL_OPTIONS: -javaagent:/otel/opentelemetry-javaagent.jar
+      # OTEL_SERVICE_NAME: ibkrfacade
+      # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    # volumes:
+    #   - ./otel/opentelemetry-javaagent.jar:/otel/opentelemetry-javaagent.jar:ro
+    networks:
+      - backend
+
+volumes:
+  redis-data:
+
+networks:
+  # no internet access, no published ports: only the stack (and the containers joined to it) can reach the services
+  backend:
+    name: ibkr-backend
+    internal: true
+  egress:

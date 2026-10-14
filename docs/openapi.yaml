@@ -1,0 +1,1018 @@
+openapi: 3.1.0
+info:
+  title: IBKR Facade
+  description: |-
+    REST API over the Interactive Brokers TWS API (IB Gateway).
+
+    * Errors are RFC 9457 problem details with a machine readable `code` property, eg. `MARKET_DATA_UNAVAILABLE`, `LIVE_TRADING_DISABLED`, `CONTRACT_NOT_FOUND`, `TWS_NOT_CONNECTED`.
+    * `POST /order` is idempotent by `client_order_id`.
+    * When the API token authentication is enabled, send `Authorization: Bearer <token>`. The read token can call the read-only endpoints, `POST /order` and `DELETE /orders/{orderId}` need the write token.
+    * Send `traceparent` (W3C) or `X-Trace-Id` to correlate the logs, the trace id is returned in `X-Trace-Id`.
+  contact:
+    name: Mihaly Medovarszki
+    url: https://github.com/medovarszki/ibkrfacade
+    email: mihaly@medovarszki.hu
+  version: "1.0"
+servers:
+- url: /ibkr
+  description: Generated server url
+security:
+- bearerAuth: []
+tags:
+- name: News
+  description: Requires news subscriptions on the IBKR account. Missing permissions
+    are reported as 502 TWS_ERROR with the tws_error_code.
+paths:
+  /price:
+    post:
+      tags:
+      - Contracts and market data
+      summary: "Returns the last available bid, ask and last price for the given contract\
+        \ (only the conid is used)."
+      operationId: getLastPriceByContract
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MarketPrice"
+  /order:
+    post:
+      tags:
+      - Orders
+      summary: Places an order (requires the write token).
+      description: "Idempotent by client_order_id: a repeated request with the same\
+        \ client_order_id returns the existing order (HTTP 200, duplicate=true) and\
+        \ never places a new one. Reusing a client_order_id with different parameters\
+        \ is rejected with 409. Without a recent bid/ask of the instrument the order\
+        \ is rejected with 422 MARKET_DATA_UNAVAILABLE."
+      operationId: placeOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceOrderRequest"
+        required: true
+      responses:
+        "201":
+          description: Order placed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "200":
+          description: Order with the same client_order_id already exists
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          description: Invalid request
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "403":
+          description: LIVE_TRADING_DISABLED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: CONTRACT_NOT_FOUND
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "409":
+          description: CLIENT_ORDER_ID_REUSED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "422":
+          description: MARKET_DATA_UNAVAILABLE
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "503":
+          description: "TWS_NOT_CONNECTED, ACCOUNT_MODE_UNKNOWN, IDEMPOTENCY_STORE_UNAVAILABLE"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+  /subscribe/{conid}:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Subscribes to an instrument by it's conid. Subscription means the\
+        \ TWS starts streaming the market data for the instrument which will be saved\
+        \ into Redis TimeSeries (stream:[conid]:[BID|ASK|LAST])"
+      operationId: subscribeMarketDataByConid
+      parameters:
+      - name: conid
+        in: path
+        description: The conid (IBKR unique id) of the instrument
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ContractDto"
+  /search:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Search for an instrument by it's ticker, or part of it's name."
+      operationId: searchContract
+      parameters:
+      - name: query
+        in: query
+        description: "Ticker, or name of the traded instrument"
+        required: true
+        schema:
+          type: string
+        examples:
+          Ticker:
+            description: Ticker
+            value: AAPL
+          Company name:
+            description: Company name
+            value: Apple
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractDto"
+  /price/{conid}:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Returns the last available bid, ask and last price by conid. The prices\
+        \ are null if there's no market data subscription, or no tick arrived yet."
+      operationId: getLastPriceByConid
+      parameters:
+      - name: conid
+        in: path
+        description: The conid (IBKR unique id) of the instrument
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MarketPrice"
+  /positions:
+    get:
+      tags:
+      - Account
+      summary: "Returns the open positions with average cost, market value and P&L."
+      operationId: getAllPositions
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PositionHolder"
+  /orders:
+    get:
+      tags:
+      - Orders
+      summary: "Returns the orders of the day (open, completed and the ones placed\
+        \ by the facade), or the order with the given client_order_id (a list with\
+        \ 0 or 1 element)."
+      operationId: getOrders
+      parameters:
+      - name: client_order_id
+        in: query
+        description: Client side order id (IBKR orderRef)
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderResponse"
+  /orders/{orderId}:
+    get:
+      tags:
+      - Orders
+      summary: "Returns an order by the IBKR order id: status, filled quantity, average\
+        \ fill price, commission and executions."
+      operationId: getOrder
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+    delete:
+      tags:
+      - Orders
+      summary: Requests the cancellation of an active order (requires the write token).
+      operationId: cancelOrder
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "202":
+          description: "Cancellation requested, see the status in the response"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: ORDER_NOT_FOUND
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "409":
+          description: ORDER_NOT_ACTIVE
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+  /orders/active:
+    get:
+      tags:
+      - Orders
+      summary: Returns the active (working) orders.
+      operationId: getActiveOrders
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderResponse"
+  /optionChain/{underlyingConid}:
+    get:
+      tags:
+      - Contracts and market data
+      summary: Returns the option chain for an underlying instrument. This method
+        won't subscribe to the market data of the options.
+      operationId: getOptionChain
+      parameters:
+      - name: underlyingConid
+        in: path
+        description: The conid (IBKR unique id) of the underlying instrument
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Option"
+  /news/{conid}:
+    get:
+      tags:
+      - News
+      summary: Historical news headlines of an instrument (reqHistoricalNews)
+      operationId: getHeadlines
+      parameters:
+      - name: conid
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      - name: providers
+        in: query
+        description: "Provider codes separated by '+', defaults to every available\
+          \ provider"
+        required: false
+        schema:
+          type: string
+        example: BRFG+DJNL
+      - name: limit
+        in: query
+        description: Number of headlines (1-300)
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      - name: start
+        in: query
+        description: "Start time (yyyy-MM-dd HH:mm:ss.0, UTC)"
+        required: false
+        schema:
+          type: string
+      - name: end
+        in: query
+        description: "End time (yyyy-MM-dd HH:mm:ss.0, UTC)"
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NewsHeadline"
+  /news/providers:
+    get:
+      tags:
+      - News
+      summary: News providers available for the account (reqNewsProviders)
+      operationId: getProviders
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NewsProviderDto"
+  /news/article/{providerCode}/{articleId}:
+    get:
+      tags:
+      - News
+      summary: News article body (reqNewsArticle)
+      operationId: getArticle
+      parameters:
+      - name: providerCode
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: articleId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/NewsArticle"
+  /history/{conid}:
+    get:
+      tags:
+      - Contracts and market data
+      summary: Historical OHLCV bars (reqHistoricalData). Subject to the IBKR historical
+        data pacing limits and market data permissions.
+      operationId: getHistory
+      parameters:
+      - name: conid
+        in: path
+        description: The conid (IBKR unique id) of the instrument
+        required: true
+        schema:
+          type: integer
+          format: int32
+      - name: duration
+        in: query
+        description: "Period: <number> <S|D|W|M|Y>"
+        required: false
+        schema:
+          type: string
+          default: 1 M
+        example: 1
+      - name: barSize
+        in: query
+        description: "Bar size, eg. '1 min', '5 mins', '1 hour', '1 day'"
+        required: false
+        schema:
+          type: string
+          default: 1 day
+        example: 1
+      - name: whatToShow
+        in: query
+        description: "TRADES, MIDPOINT, BID, ASK, BID_ASK, ADJUSTED_LAST, ..."
+        required: false
+        schema:
+          type: string
+          default: TRADES
+        example: TRADES
+      - name: useRth
+        in: query
+        description: Regular trading hours only
+        required: false
+        schema:
+          type: boolean
+          default: true
+      - name: endDateTime
+        in: query
+        description: "End of the period in UTC (yyyyMMdd-HH:mm:ss), defaults to now"
+        required: false
+        schema:
+          type: string
+        example: 20261014-20:00:00
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/HistoryResponse"
+  /contract/{conid}:
+    get:
+      tags:
+      - Contracts and market data
+      summary: Returns the contract descriptor with its details. Unknown conids are
+        resolved through TWS.
+      operationId: getContractByConid
+      parameters:
+      - name: conid
+        in: path
+        description: The conid (IBKR unique id) of the instrument
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ContractDto"
+  /account/summary:
+    get:
+      tags:
+      - Account
+      summary: "Account summary: NAV (NetLiquidation), cash, available funds, buying\
+        \ power, margin requirements, base currency and the time of the query."
+      operationId: getSummary
+      parameters:
+      - name: account
+        in: query
+        description: "Account id, defaults to the first managed account"
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/AccountSummary"
+components:
+  schemas:
+    ContractDto:
+      type: object
+      description: Instrument descriptor. The conid is the unique IBKR contract id.
+      properties:
+        conid:
+          type: integer
+          format: int32
+        symbol:
+          type: string
+        sec_type:
+          type: string
+        exchange:
+          type: string
+        primary_exchange:
+          type: string
+        currency:
+          type: string
+        local_symbol:
+          type: string
+        trading_class:
+          type: string
+        multiplier:
+          type: string
+        last_trade_date:
+          type: string
+        strike:
+          type: number
+          format: double
+        right:
+          type: string
+        description:
+          type: string
+        long_name:
+          type: string
+        time_zone:
+          type: string
+          description: "Time zone of the exchange, eg. US/Eastern"
+        min_tick:
+          type: number
+          format: double
+        min_size:
+          type: number
+        size_increment:
+          type: number
+        industry:
+          type: string
+        category:
+          type: string
+        stock_type:
+          type: string
+        valid_exchanges:
+          type: string
+        trading_hours:
+          type: string
+        liquid_hours:
+          type: string
+        stream_request_id:
+          type: integer
+          format: int32
+          description: "Ticker id of the market data subscription in the current session,\
+            \ if subscribed"
+    MarketPrice:
+      type: object
+      description: Latest known bid/ask/last prices of an instrument from the market
+        data stream.
+      properties:
+        conid:
+          type: integer
+          format: int32
+          description: IBKR contract id
+        bid:
+          type: number
+          format: double
+          description: "Latest bid, null if unknown"
+        ask:
+          type: number
+          format: double
+          description: "Latest ask, null if unknown"
+        last:
+          type: number
+          format: double
+          description: "Latest trade price, null if unknown"
+        bid_time:
+          type: string
+          format: date-time
+        ask_time:
+          type: string
+          format: date-time
+        last_time:
+          type: string
+          format: date-time
+        subscribed:
+          type: boolean
+          description: True if the facade has an active market data subscription for
+            the instrument
+        stream_error:
+          type: string
+          description: "Last error reported by TWS for the market data subscription,\
+            \ eg. missing market data permission"
+        quote_time:
+          type: string
+          format: date-time
+    PlaceOrderRequest:
+      type: object
+      description: "New order. The client_order_id is an idempotency key: a request\
+        \ with an already used client_order_id never places a new order, it returns\
+        \ the existing one."
+      properties:
+        client_order_id:
+          type: string
+          description: "Client side unique id of the order, stored in the IBKR orderRef\
+            \ field"
+          example: auxin-20261014-0001
+          maxLength: 64
+          minLength: 0
+          pattern: "[A-Za-z0-9._:-]+"
+        conid:
+          type: integer
+          format: int32
+          description: IBKR contract id
+          example: 265598
+          exclusiveMinimum: 0
+        action:
+          type: string
+          enum:
+          - BUY
+          - SELL
+        quantity:
+          type: number
+          example: 10
+          exclusiveMinimum: 0
+        order_type:
+          type: string
+          description: Defaults to LMT
+          enum:
+          - MKT
+          - LMT
+          - STP
+          - STP_LMT
+        limit_price:
+          type: number
+          format: double
+          description: Required for LMT and STP_LMT orders
+          exclusiveMinimum: 0
+        stop_price:
+          type: number
+          format: double
+          description: Required for STP and STP_LMT orders
+          exclusiveMinimum: 0
+        tif:
+          type: string
+          description: Defaults to DAY
+          enum:
+          - DAY
+          - GTC
+          - IOC
+          - FOK
+          - OPG
+        outside_rth:
+          type: boolean
+          description: Allow the order to be filled outside of the regular trading
+            hours. Defaults to false
+        account:
+          type: string
+          description: "Account id, optional if the gateway manages a single account"
+          maxLength: 32
+          minLength: 0
+      required:
+      - action
+      - client_order_id
+      - conid
+      - quantity
+    ExecutionRecord:
+      type: object
+      description: A (partial) fill of an order
+      properties:
+        exec_id:
+          type: string
+        time:
+          type: string
+          description: Execution time as reported by TWS
+        side:
+          type: string
+          description: BOT or SLD
+        shares:
+          type: number
+          description: Filled quantity of this execution
+        price:
+          type: number
+          format: double
+          description: Execution price
+        exchange:
+          type: string
+        commission:
+          type: number
+          format: double
+          description: "Commission and fees of this execution, null until the commission\
+            \ report arrives"
+        commission_currency:
+          type: string
+        realized_pnl:
+          type: number
+          format: double
+    OrderResponse:
+      type: object
+      description: State of an order
+      properties:
+        order_id:
+          type: integer
+          format: int32
+          description: IBKR order id (unique per API client id)
+        perm_id:
+          type: integer
+          format: int64
+          description: "IBKR permanent order id, 0 until TWS assigns it"
+        client_order_id:
+          type: string
+          description: "Client side idempotency key, stored in the IBKR orderRef field"
+        account:
+          type: string
+        conid:
+          type: integer
+          format: int32
+        symbol:
+          type: string
+        sec_type:
+          type: string
+        currency:
+          type: string
+        action:
+          type: string
+          description: BUY or SELL
+        order_type:
+          type: string
+        quantity:
+          type: number
+        limit_price:
+          type: number
+          format: double
+        stop_price:
+          type: number
+          format: double
+        tif:
+          type: string
+        outside_rth:
+          type: boolean
+        status:
+          type: string
+          description: "IBKR order status (ApiPending, PendingSubmit, PreSubmitted,\
+            \ Submitted, PendingCancel, Cancelled, ApiCancelled, Filled, Inactive)\
+            \ or one of the facade statuses: Rejected (TWS rejected the order before\
+            \ acknowledging it), Unknown (the order was reserved, but it's not known\
+            \ by TWS)"
+        active:
+          type: boolean
+          description: True while the order is working on the market
+        filled_quantity:
+          type: number
+        remaining_quantity:
+          type: number
+        avg_fill_price:
+          type: number
+          format: double
+        commission:
+          type: number
+          format: double
+          description: "Sum of the commissions and fees of the executions, null if\
+            \ no report arrived yet"
+        commission_currency:
+          type: string
+        realized_pnl:
+          type: number
+          format: double
+        executions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExecutionRecord"
+        error_code:
+          type: integer
+          format: int32
+        error_message:
+          type: string
+        warnings:
+          type: array
+          description: Warnings and informational messages sent by TWS for the order
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        duplicate:
+          type: boolean
+          description: True if the response belongs to an earlier request with the
+            same client_order_id (no new order was placed)
+    PositionHolder:
+      type: object
+      description: Represents an open position
+      properties:
+        account:
+          type: string
+          description: Account id
+        conid:
+          type: integer
+          format: int32
+          description: IBKR contract id
+        symbol:
+          type: string
+        sec_type:
+          type: string
+        currency:
+          type: string
+        quantity:
+          type: number
+          description: "Size of the position. In case of short position, the value\
+            \ is negative."
+        avg_cost:
+          type: number
+          format: double
+          description: Average cost of the position (for derivatives it includes the
+            multiplier).
+        market_price:
+          type: number
+          format: double
+          description: "Latest market price reported by the portfolio update, null\
+            \ until the first update arrives."
+        market_value:
+          type: number
+          format: double
+        unrealized_pnl:
+          type: number
+          format: double
+        realized_pnl:
+          type: number
+          format: double
+        updated_at:
+          type: string
+          format: date-time
+    Option:
+      type: object
+      properties:
+        symbol:
+          type: string
+        expiration:
+          type: string
+        strike:
+          type: number
+          format: double
+        right:
+          type: string
+          enum:
+          - None
+          - Put
+          - Call
+    NewsHeadline:
+      type: object
+      properties:
+        time:
+          type: string
+          description: Time of the news as reported by TWS (UTC)
+          example: 2026-10-14 13:30:00.0
+        provider_code:
+          type: string
+        article_id:
+          type: string
+        headline:
+          type: string
+    NewsProviderDto:
+      type: object
+      properties:
+        provider_code:
+          type: string
+        provider_name:
+          type: string
+    NewsArticle:
+      type: object
+      properties:
+        provider_code:
+          type: string
+        article_id:
+          type: string
+        article_type:
+          type: string
+          description: "text, or binary (base64 encoded PDF)"
+        text:
+          type: string
+    HistoricalBar:
+      type: object
+      description: OHLCV bar
+      properties:
+        time:
+          type: string
+          description: "Start of the bar: ISO-8601 date-time with the offset of the\
+            \ exchange time zone for intraday bars (eg. 2026-10-14T09:30-04:00), ISO-8601\
+            \ date for daily and longer bars"
+          example: 2026-10-14T09:30:00-04:00
+        timestamp:
+          type: integer
+          format: int64
+          description: "Start of the bar as epoch milliseconds (daily bars: midnight\
+            \ in the exchange time zone)"
+        open:
+          type: number
+          format: double
+        high:
+          type: number
+          format: double
+        low:
+          type: number
+          format: double
+        close:
+          type: number
+          format: double
+        volume:
+          type: number
+        wap:
+          type: number
+          description: Volume weighted average price
+        count:
+          type: integer
+          format: int32
+          description: Number of trades
+    HistoryResponse:
+      type: object
+      description: Historical bars of an instrument
+      properties:
+        conid:
+          type: integer
+          format: int32
+        symbol:
+          type: string
+        duration:
+          type: string
+        bar_size:
+          type: string
+        what_to_show:
+          type: string
+        use_rth:
+          type: boolean
+        time_zone:
+          type: string
+          description: "Time zone of the exchange, the bar times are in this zone"
+          example: US/Eastern
+        bars:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoricalBar"
+    AccountSummary:
+      type: object
+      description: Account summary (reqAccountSummary). Monetary values are in the
+        base currency of the account.
+      properties:
+        account:
+          type: string
+        account_mode:
+          type: string
+          description: PAPER or LIVE
+          enum:
+          - PAPER
+          - LIVE
+          - UNKNOWN
+        currency:
+          type: string
+          description: Base currency of the account
+        net_liquidation:
+          type: number
+          format: double
+          description: Net liquidation value (NAV)
+        total_cash_value:
+          type: number
+          format: double
+        available_funds:
+          type: number
+          format: double
+        buying_power:
+          type: number
+          format: double
+        init_margin_req:
+          type: number
+          format: double
+        maint_margin_req:
+          type: number
+          format: double
+        excess_liquidity:
+          type: number
+          format: double
+        gross_position_value:
+          type: number
+          format: double
+        cushion:
+          type: number
+          format: double
+          description: Excess liquidity as a fraction of the net liquidation value
+        values:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Every tag returned by TWS, unparsed"
+        timestamp:
+          type: string
+          format: date-time
+          description: Time of the query
+  securitySchemes:
+    bearerAuth:
+      type: http
+      description: Read or write API token (if ibkr.security.enabled=true)
+      scheme: bearer
