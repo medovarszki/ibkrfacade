@@ -54,6 +54,50 @@ curl -H "Authorization: Bearer $IBKR_SECURITY_READ_TOKEN" http://localhost:8082/
 curl http://localhost:8082/ibkr/actuator/health
 ```
 
+### Using a TWS / IB Gateway running on the host
+
+Instead of the `ib-gateway` container the facade can connect to a TWS (or IB Gateway) running on the docker host,
+eg. the desktop TWS during development. The [docker-compose.host-tws.yml](docker-compose.host-tws.yml) override
+doesn't start `ib-gateway` and points the facade to `host.docker.internal:7497` (paper TWS; live: 7496, IB Gateway:
+4002 / 4001, set `HOST_TWS_PORT`). The internal network can't reach the host, so the facade joins an extra network
+with a fixed address (`HOST_TWS_CLIENT_IP`, default `172.31.250.10`).
+
+The facade reaches the host through the gateway of this network (`host.docker.internal` = `172.31.250.1`, see
+`HOST_TWS_GATEWAY`), so the connection always comes from `172.31.250.10`. That is the address TWS and the firewall
+see, not the docker host address (`172.17.0.1`).
+
+Setup on the host:
+
+1. TWS: *File > Global Configuration > API > Settings*
+   - check *Enable ActiveX and Socket Clients*, *Socket port* `7497` (paper)
+   - uncheck *Allow connections from localhost only*
+   - add `172.31.250.10` to the *Trusted IPs* (otherwise TWS asks to accept every connection)
+2. Firewall: if the host drops incoming traffic (eg. ufw with the default deny policy, the connection times out and
+   `[UFW BLOCK] ... DPT=7497` shows up in `journalctl -k`), allow only the facade to reach the API port:
+   ```bash
+   sudo ufw allow from 172.31.250.10 to any port 7497 proto tcp comment 'ibkrfacade -> TWS'
+   ```
+
+Troubleshooting (the `tws` component of `/actuator/health` stays DOWN):
+
+- Test the TCP connection from the container:
+  `docker exec ibkrfacade-ibkrfacade-1 bash -c '</dev/tcp/host.docker.internal/7497' && echo OK`.
+  A timeout means the packets don't get through. If the TCP connection works but the API doesn't, check the TWS
+  settings above.
+- Firewall: `journalctl -k | grep 'DPT=7497'` shows the blocked packets with their real source address.
+- Duplicate subnet: if Docker stops while the stack is starting, a bridge can be left behind with the same subnet.
+  The host then sends the TWS replies to that dead bridge: TWS accepts the packets, but the container gets a timeout.
+  `ip -4 route | grep 172.31.250` must list exactly one route. Delete the extra bridge, which isn't listed in
+  `docker network ls` and is usually `linkdown`: `sudo ip link delete br-<id>`.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.host-tws.yml -f docker-compose.expose.yml up -d --build
+```
+
+To make it the default, set `COMPOSE_FILE` in `.env` (see `.env.example`), then a plain `docker compose up -d` is
+enough. `TWS_USERID` / `TWS_PASSWORD` are still required by the base file, but unused in this mode: any placeholder
+will do.
+
 The facade connects automatically when the gateway is ready, and reconnects after the daily restart.
 Secrets are only read from the environment (`.env` is git-ignored), nothing is stored in the image. For the gateway
 password you can also use Docker secrets (`TWS_PASSWORD_FILE`), see the

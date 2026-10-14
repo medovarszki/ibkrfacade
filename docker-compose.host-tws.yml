@@ -1,0 +1,35 @@
+# Optional override: uses a TWS / IB Gateway running on the docker host instead of the ib-gateway container.
+#   docker compose -f docker-compose.yml -f docker-compose.host-tws.yml up -d --build
+# Combine with docker-compose.expose.yml to reach the REST API from the host.
+#
+# TWS setup (File > Global Configuration > API > Settings):
+#   - Enable ActiveX and Socket Clients
+#   - Socket port: 7497 (paper) / 7496 (live), see HOST_TWS_PORT
+#   - uncheck "Allow connections from localhost only"
+#   - add the facade's fixed address (HOST_TWS_CLIENT_IP, default 172.31.250.10) to the Trusted IPs
+services:
+  ib-gateway:
+    profiles: ["gateway"]   # not started
+
+  ibkrfacade:
+    depends_on: !override
+      redis:
+        condition: service_healthy
+    # the host through the gateway of the host-tws network, so the connection always comes from HOST_TWS_CLIENT_IP
+    # (with host-gateway it would leave on the default route, eg. the edge network of the expose override)
+    extra_hosts:
+      - "host.docker.internal:${HOST_TWS_GATEWAY:-172.31.250.1}"
+    environment:
+      IBKR_TWS_HOST: host.docker.internal
+      IBKR_TWS_PORT: ${HOST_TWS_PORT:-7497}
+    networks:
+      backend:
+      host-tws:
+        ipv4_address: ${HOST_TWS_CLIENT_IP:-172.31.250.10}
+
+networks:
+  # an internal network can't reach the host, the facade gets a fixed address so it can be a TWS Trusted IP
+  host-tws:
+    ipam:
+      config:
+        - subnet: ${HOST_TWS_SUBNET:-172.31.250.0/24}
