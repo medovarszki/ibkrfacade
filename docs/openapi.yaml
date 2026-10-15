@@ -504,6 +504,39 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ContractDto"
+  /contract/{conid}/session:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Trading session of the instrument: open, next_open and next_close\
+        \ (UTC), computed from the liquid_hours (regular trading hours, default) or\
+        \ the trading_hours (hours=trading, with the extended hours) and the time\
+        \ zone of the exchange."
+      operationId: getTradingSession
+      parameters:
+      - name: conid
+        in: path
+        description: The conid (IBKR unique id) of the instrument
+        required: true
+        schema:
+          type: integer
+          format: int32
+      - name: hours
+        in: query
+        description: liquid (regular trading hours) or trading (with the extended
+          hours)
+        required: false
+        schema:
+          type: string
+          default: liquid
+          pattern: liquid|trading
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TradingSession"
   /account/summary:
     get:
       tags:
@@ -995,6 +1028,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/HistoricalBar"
+    TradingSession:
+      type: object
+      description: "Trading session of an instrument, computed from the liquid_hours\
+        \ (regular trading hours) or trading_hours (including the extended hours)\
+        \ and the time_zone of the contract details."
+      properties:
+        conid:
+          type: integer
+          format: int32
+          description: IBKR contract id
+        hours:
+          type: string
+          description: liquid (regular trading hours) or trading (including the extended
+            hours)
+        time_zone:
+          type: string
+          description: "Time zone of the exchange, eg. US/Eastern"
+        open:
+          type: boolean
+          description: True if the market is open at as_of
+        next_open:
+          type: string
+          format: date-time
+          description: "Start of the next session after as_of (the one after the current\
+            \ session, if open), null if unknown (TWS sends about one week ahead)"
+        next_close:
+          type: string
+          format: date-time
+          description: "End of the current session if open, otherwise end of the next\
+            \ session; null if unknown"
+        as_of:
+          type: string
+          format: date-time
+          description: Time of the evaluation
     AccountSummary:
       type: object
       description: Account summary (reqAccountSummary). Monetary values are in the

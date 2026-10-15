@@ -145,6 +145,7 @@ with a machine readable `code`:
 |---|---|---|
 | GET | `/search?query=` | Instrument search |
 | GET | `/contract/{conid}` | Contract details (unknown conids are resolved through TWS, 404 if there's no such contract) |
+| GET | `/contract/{conid}/session?hours=liquid` | Market open / `next_open` / `next_close`, see [Trading session](#trading-session) |
 | GET | `/subscribe/{conid}` | Market data subscription (stream into Redis) |
 | GET | `/price/{conid}?max_age=` | Latest bid / ask / last with timestamps and freshness, see [Prices](#prices) |
 | GET | `/history/{conid}?duration=1 M&barSize=1 day&whatToShow=TRADES&useRth=true` | OHLCV bars, times in the exchange time zone |
@@ -173,6 +174,20 @@ with a machine readable `code`:
 - `market_data_type`: `LIVE`, `FROZEN`, `DELAYED` or `DELAYED_FROZEN`, as reported by TWS for the subscription.
   A paper account without shared live market data gets `DELAYED` data.
 - An unknown conid is 404 `CONTRACT_NOT_FOUND`.
+
+### Trading session
+
+```json
+{"conid": 265598, "hours": "liquid", "time_zone": "US/Eastern", "open": true,
+ "next_open": "2026-10-16T13:30:00Z", "next_close": "2026-10-15T20:00:00Z", "as_of": "2026-10-15T15:49:00Z"}
+```
+
+Computed from the `liquid_hours` (regular trading hours, default) or the `trading_hours` (`hours=trading`, with the
+extended hours) and the `time_zone` of the contract details, so the clients don't have to parse the TWS format.
+Times are UTC. `next_close` is the end of the current session if open, otherwise of the next one; `next_open` is
+the start of the next session (after the current one, if open). TWS sends the hours about one week ahead: the
+cached contract details are requested again when they run out (without TWS connection the cached ones are used, and
+`next_open` / `next_close` may be null). An unusable time zone is 502 `TRADING_HOURS_UNAVAILABLE`.
 
 ### Account summary
 

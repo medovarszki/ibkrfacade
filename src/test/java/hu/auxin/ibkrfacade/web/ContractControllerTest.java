@@ -3,6 +3,8 @@ package hu.auxin.ibkrfacade.web;
 import hu.auxin.ibkrfacade.marketdata.MarketDataType;
 import hu.auxin.ibkrfacade.marketdata.MarketPrice;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
+import hu.auxin.ibkrfacade.session.TradingSession;
+import hu.auxin.ibkrfacade.session.TradingSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -21,13 +23,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ContractController.class)
-class ContractControllerPriceTest {
+class ContractControllerTest {
 
     @Autowired
     private MockMvc mvc;
 
     @MockitoBean
     private ContractManagerService contractManagerService;
+
+    @MockitoBean
+    private TradingSessionService tradingSessionService;
 
     @Test
     void priceContainsTheFreshnessFields() throws Exception {
@@ -64,5 +69,22 @@ class ContractControllerPriceTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         verifyNoInteractions(contractManagerService);
+    }
+
+    @Test
+    void tradingSession() throws Exception {
+        when(tradingSessionService.getSession(265598, false)).thenReturn(new TradingSession(265598, "liquid",
+                "US/Eastern", true, Instant.parse("2026-10-16T13:30:00Z"), Instant.parse("2026-10-15T20:00:00Z"),
+                Instant.parse("2026-10-15T15:49:00Z")));
+
+        mvc.perform(get("/contract/265598/session"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.open").value(true))
+                .andExpect(jsonPath("$.time_zone").value("US/Eastern"))
+                .andExpect(jsonPath("$.next_open").value("2026-10-16T13:30:00Z"))
+                .andExpect(jsonPath("$.next_close").value("2026-10-15T20:00:00Z"))
+                .andExpect(jsonPath("$.as_of").value("2026-10-15T15:49:00Z"));
+        mvc.perform(get("/contract/265598/session").param("hours", "rth"))
+                .andExpect(status().isBadRequest());
     }
 }

@@ -3,11 +3,14 @@ package hu.auxin.ibkrfacade.web;
 import hu.auxin.ibkrfacade.data.holder.Option;
 import hu.auxin.ibkrfacade.marketdata.MarketPrice;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
+import hu.auxin.ibkrfacade.session.TradingSession;
+import hu.auxin.ibkrfacade.session.TradingSessionService;
 import hu.auxin.ibkrfacade.web.dto.ContractDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,9 +31,11 @@ import java.util.List;
 public class ContractController {
 
     private final ContractManagerService contractManagerService;
+    private final TradingSessionService tradingSessionService;
 
-    ContractController(ContractManagerService contractManagerService) {
+    ContractController(ContractManagerService contractManagerService, TradingSessionService tradingSessionService) {
         this.contractManagerService = contractManagerService;
+        this.tradingSessionService = tradingSessionService;
     }
 
     @Operation(summary = "Search for an instrument by it's ticker, or part of it's name.")
@@ -54,6 +59,16 @@ public class ContractController {
     @GetMapping("/contract/{conid}")
     ContractDto getContractByConid(@Parameter(description = "The conid (IBKR unique id) of the instrument") @PathVariable int conid) {
         return ContractDto.of(contractManagerService.getContractHolder(conid));
+    }
+
+    @Operation(summary = "Trading session of the instrument: open, next_open and next_close (UTC), computed from "
+            + "the liquid_hours (regular trading hours, default) or the trading_hours (hours=trading, with the "
+            + "extended hours) and the time zone of the exchange.")
+    @GetMapping("/contract/{conid}/session")
+    TradingSession getTradingSession(@Parameter(description = "The conid (IBKR unique id) of the instrument") @PathVariable int conid,
+                                     @Parameter(description = "liquid (regular trading hours) or trading (with the extended hours)")
+                                     @RequestParam(defaultValue = "liquid") @Pattern(regexp = "liquid|trading") String hours) {
+        return tradingSessionService.getSession(conid, "trading".equals(hours));
     }
 
     @Operation(summary = "Returns the last available bid, ask and last price by conid. Without a market data "
