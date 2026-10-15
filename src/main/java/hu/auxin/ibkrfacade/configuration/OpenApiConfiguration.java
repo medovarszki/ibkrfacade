@@ -24,7 +24,7 @@ public class OpenApiConfiguration {
                                 REST API over the Interactive Brokers TWS API (IB Gateway).
 
                                 * Errors are RFC 9457 problem details with a machine readable `code` property, \
-                                eg. `MARKET_DATA_UNAVAILABLE`, `LIVE_TRADING_DISABLED`, `CONTRACT_NOT_FOUND`, \
+                                eg. `MARKET_DATA_UNAVAILABLE`, `STALE_MARKET_DATA`, `LIVE_TRADING_DISABLED`, `CONTRACT_NOT_FOUND`, \
                                 `TWS_NOT_CONNECTED`.
                                 * `POST /order` is idempotent by `client_order_id`.
                                 * When the API token authentication is enabled, send `Authorization: Bearer <token>`. \

@@ -4,7 +4,7 @@ info:
   description: |-
     REST API over the Interactive Brokers TWS API (IB Gateway).
 
-    * Errors are RFC 9457 problem details with a machine readable `code` property, eg. `MARKET_DATA_UNAVAILABLE`, `LIVE_TRADING_DISABLED`, `CONTRACT_NOT_FOUND`, `TWS_NOT_CONNECTED`.
+    * Errors are RFC 9457 problem details with a machine readable `code` property, eg. `MARKET_DATA_UNAVAILABLE`, `STALE_MARKET_DATA`, `LIVE_TRADING_DISABLED`, `CONTRACT_NOT_FOUND`, `TWS_NOT_CONNECTED`.
     * `POST /order` is idempotent by `client_order_id`.
     * When the API token authentication is enabled, send `Authorization: Bearer <token>`. The read token can call the read-only endpoints, `POST /order` and `DELETE /orders/{orderId}` need the write token.
     * Send `traceparent` (W3C) or `X-Trace-Id` to correlate the logs, the trace id is returned in `X-Trace-Id`.
@@ -28,8 +28,17 @@ paths:
       tags:
       - Contracts and market data
       summary: "Returns the last available bid, ask and last price for the given contract\
-        \ (only the conid is used)."
+        \ (only the conid is used). Works like GET /price/{conid}."
       operationId: getLastPriceByContract
+      parameters:
+      - name: max_age
+        in: query
+        description: Maximum age of the bid/ask in seconds
+        required: false
+        schema:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
       requestBody:
         content:
           application/json:
@@ -165,8 +174,11 @@ paths:
     get:
       tags:
       - Contracts and market data
-      summary: "Returns the last available bid, ask and last price by conid. The prices\
-        \ are null if there's no market data subscription, or no tick arrived yet."
+      summary: "Returns the last available bid, ask and last price by conid. Without\
+        \ a market data subscription it subscribes, and waits at most IBKR_PRICE_QUOTE_WAIT\
+        \ (3s) for the first quote. The prices are null if no tick arrived yet. Check\
+        \ stale / quote_age_seconds: the price may be old, eg. outside of the trading\
+        \ hours. With max_age an older price is rejected with 422 STALE_MARKET_DATA."
       operationId: getLastPriceByConid
       parameters:
       - name: conid
@@ -176,6 +188,14 @@ paths:
         schema:
           type: integer
           format: int32
+      - name: max_age
+        in: query
+        description: Maximum age of the bid/ask in seconds
+        required: false
+        schema:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
       responses:
         "200":
           description: OK
@@ -606,6 +626,25 @@ components:
           type: string
           description: "Last error reported by TWS for the market data subscription,\
             \ eg. missing market data permission"
+        market_data_type:
+          type: string
+          description: "Type of the market data sent by TWS for the subscription,\
+            \ null if unknown (no subscription, or tick-by-tick stream)"
+          enum:
+          - LIVE
+          - FROZEN
+          - DELAYED
+          - DELAYED_FROZEN
+        quote_age_seconds:
+          type: integer
+          format: int64
+          description: "Age of the latest bid or ask (quote_time) in whole seconds\
+            \ at the time of the response, null if there is no quote"
+        stale:
+          type: boolean
+          description: "True if there is no bid or ask, or the latest one is older\
+            \ than the staleness threshold (IBKR_PRICE_STALE_AFTER, default IBKR_ORDER_MAX_QUOTE_AGE\
+            \ = 15m)"
         quote_time:
           type: string
           format: date-time
@@ -1011,6 +1050,11 @@ components:
           type: string
           format: date-time
           description: Time of the query
+        updated_at:
+          type: string
+          format: date-time
+          description: Time of the latest account summary update received from TWS.
+            TWS sends the changes every 3 minutes.
   securitySchemes:
     bearerAuth:
       type: http

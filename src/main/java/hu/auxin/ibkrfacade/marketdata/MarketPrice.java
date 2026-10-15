@@ -16,20 +16,36 @@ public record MarketPrice(
         @JsonProperty("ask_time") Instant askTime,
         @JsonProperty("last_time") Instant lastTime,
         @Schema(description = "True if the facade has an active market data subscription for the instrument") boolean subscribed,
-        @JsonProperty("stream_error") @Schema(description = "Last error reported by TWS for the market data subscription, eg. missing market data permission") String streamError) {
+        @JsonProperty("stream_error") @Schema(description = "Last error reported by TWS for the market data subscription, eg. missing market data permission") String streamError,
+        @JsonProperty("market_data_type") @Schema(description = "Type of the market data sent by TWS for the "
+                + "subscription, null if unknown (no subscription, or tick-by-tick stream)") MarketDataType marketDataType,
+        @JsonProperty("quote_age_seconds") @Schema(description = "Age of the latest bid or ask (quote_time) in "
+                + "whole seconds at the time of the response, null if there is no quote") Long quoteAgeSeconds,
+        @Schema(description = "True if there is no bid or ask, or the latest one is older than the staleness "
+                + "threshold (IBKR_PRICE_STALE_AFTER, default IBKR_ORDER_MAX_QUOTE_AGE = 15m)") boolean stale) {
+
+    /**
+     * Computes the age of the quote and the stale flag at the given time.
+     *
+     * @param staleAfter a quote older than this is stale; zero or negative disables the age check
+     */
+    public static MarketPrice of(Integer conid, Double bid, Double ask, Double last, Instant bidTime, Instant askTime,
+                                 Instant lastTime, boolean subscribed, String streamError,
+                                 MarketDataType marketDataType, Instant now, Duration staleAfter) {
+        Instant quoteTime = latest(bidTime, askTime);
+        Long age = quoteTime == null ? null : Math.max(0, Duration.between(quoteTime, now).toSeconds());
+        boolean stale = quoteTime == null
+                || (staleAfter.isPositive() && quoteTime.isBefore(now.minus(staleAfter)));
+        return new MarketPrice(conid, bid, ask, last, bidTime, askTime, lastTime, subscribed, streamError,
+                marketDataType, age, stale);
+    }
 
     /**
      * Time of the most recent bid or ask, null if there is no quote at all.
      */
     @JsonProperty("quote_time")
     public Instant quoteTime() {
-        if (bidTime == null) {
-            return askTime;
-        }
-        if (askTime == null) {
-            return bidTime;
-        }
-        return bidTime.isAfter(askTime) ? bidTime : askTime;
+        return latest(bidTime, askTime);
     }
 
     /**
@@ -41,5 +57,15 @@ public record MarketPrice(
             return false;
         }
         return maxAge.isZero() || maxAge.isNegative() || !quoteTime.isBefore(now.minus(maxAge));
+    }
+
+    private static Instant latest(Instant first, Instant second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first.isAfter(second) ? first : second;
     }
 }

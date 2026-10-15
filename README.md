@@ -118,6 +118,8 @@ Every property can be set through environment variables (Spring relaxed binding)
 | `IBKR_ALLOW_LIVE` | `false` | Orders are rejected (403 `LIVE_TRADING_DISABLED`) on a live account unless `true` |
 | `IBKR_STRATEGIES_ENABLED` | `false` | Loads the sample strategies (`SampleSaver`, `TrendTradingStrategy`) |
 | `IBKR_MARKET_DATA_TYPE` | `1` | 1 live, 2 frozen, 3 delayed, 4 delayed frozen |
+| `IBKR_PRICE_STALE_AFTER` | `IBKR_ORDER_MAX_QUOTE_AGE` | `GET /price` reports `stale: true` if the latest bid/ask is older than this |
+| `IBKR_PRICE_QUOTE_WAIT` | `3s` | How long `GET /price` waits for the first quote of a not yet subscribed instrument |
 | `IBKR_ORDER_MAX_QUOTE_AGE` | `15m` | An order needs a bid/ask not older than this (`0` disables the age check) |
 | `IBKR_ORDER_QUOTE_WAIT` | `3s` | How long to wait for the first quote of a not yet subscribed instrument |
 | `IBKR_ORDER_IDEMPOTENCY_TTL` | `30d` | How long a `client_order_id` is kept in Redis |
@@ -144,16 +146,40 @@ with a machine readable `code`:
 | GET | `/search?query=` | Instrument search |
 | GET | `/contract/{conid}` | Contract details (unknown conids are resolved through TWS, 404 if there's no such contract) |
 | GET | `/subscribe/{conid}` | Market data subscription (stream into Redis) |
-| GET | `/price/{conid}` | Latest bid / ask / last with timestamps |
+| GET | `/price/{conid}?max_age=` | Latest bid / ask / last with timestamps and freshness, see [Prices](#prices) |
 | GET | `/history/{conid}?duration=1 M&barSize=1 day&whatToShow=TRADES&useRth=true` | OHLCV bars, times in the exchange time zone |
 | GET | `/optionChain/{conid}` | Option chain of an underlying |
-| GET | `/account/summary?account=` | NAV, cash, available funds, buying power, margin requirements, currency, timestamp |
+| GET | `/account/summary?account=` | NAV, cash, available funds, buying power, margin requirements, currency, `timestamp` (query), `updated_at` (last update from TWS) |
 | GET | `/positions` | Positions with average cost, market price, market value, unrealized / realized P&L |
 | POST | `/order` | Place an order (**write token**) |
 | GET | `/orders`, `/orders?client_order_id=`, `/orders/active`, `/orders/{orderId}` | Order status, filled quantity, average fill price, commission, executions |
 | DELETE | `/orders/{orderId}` | Cancel an order (**write token**) |
 | GET | `/news/providers`, `/news/{conid}`, `/news/article/{provider}/{articleId}` | News |
 | GET | `/actuator/health` | Health including the TWS connection (`tws`) and Redis, always public |
+
+### Prices
+
+```json
+{"conid": 265598, "bid": 345.0, "ask": 345.01, "last": 345.0016, "quote_time": "2026-10-15T15:22:17Z",
+ "quote_age_seconds": 4, "stale": false, "market_data_type": "LIVE", "subscribed": true, "stream_error": null, ...}
+```
+
+- The prices come from the Redis time series, they may be old (eg. from before a restart of the facade, or outside
+  of the trading hours). **Check `stale`**: it's `true` if there is no bid/ask, or the latest one is older than
+  `IBKR_PRICE_STALE_AFTER` (default: `IBKR_ORDER_MAX_QUOTE_AGE`, 15m). `quote_age_seconds` is the age of `quote_time`.
+- Without a market data subscription the instrument is subscribed automatically, and the request waits at most
+  `IBKR_PRICE_QUOTE_WAIT` (3s) for the first quote. Without a TWS connection the cached price is returned.
+- `max_age` (seconds): an older price (or no price) is rejected with 422 `STALE_MARKET_DATA`.
+- `market_data_type`: `LIVE`, `FROZEN`, `DELAYED` or `DELAYED_FROZEN`, as reported by TWS for the subscription.
+  A paper account without shared live market data gets `DELAYED` data.
+- An unknown conid is 404 `CONTRACT_NOT_FOUND`.
+
+### Account summary
+
+The facade keeps a single account summary subscription (`reqAccountSummary`) open per TWS connection, and the
+endpoint returns the latest values; TWS sends the changes every 3 minutes (`updated_at`). The subscription is never
+cancelled: IB Gateway 10.50 ignores the protobuf encoded `cancelAccountSummary`, and TWS allows only two active
+account summary subscriptions (error 322).
 
 ### Orders
 

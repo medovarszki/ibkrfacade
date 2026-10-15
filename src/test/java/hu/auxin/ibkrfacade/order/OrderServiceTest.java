@@ -98,7 +98,7 @@ class OrderServiceTest {
     }
 
     private static MarketPrice quote(Instant time) {
-        return new MarketPrice(AAPL, 150.0, 150.1, null, time, time, null, true, null);
+        return MarketPrice.of(AAPL, 150.0, 150.1, null, time, time, null, true, null, null, Instant.now(), Duration.ofMinutes(15));
     }
 
     // -- placement
@@ -285,7 +285,8 @@ class OrderServiceTest {
     @Test
     void missingMarketPriceIsRejectedAndTheClientOrderIdStaysUsable() {
         when(marketDataService.awaitQuote(any(), any(), any()))
-                .thenReturn(new MarketPrice(AAPL, null, null, null, null, null, null, true, "354: Not subscribed"));
+                .thenReturn(MarketPrice.of(AAPL, null, null, null, null, null, null, true, "354: Not subscribed", null,
+                        Instant.now(), Duration.ofMinutes(15)));
         OrderService service = service(false);
 
         assertThatThrownBy(() -> service.place(limitBuy("auxin-12")))

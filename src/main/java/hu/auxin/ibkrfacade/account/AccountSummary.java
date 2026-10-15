@@ -22,5 +22,7 @@ public record AccountSummary(
         @JsonProperty("gross_position_value") Double grossPositionValue,
         @Schema(description = "Excess liquidity as a fraction of the net liquidation value") Double cushion,
         @Schema(description = "Every tag returned by TWS, unparsed") Map<String, String> values,
-        @Schema(description = "Time of the query") Instant timestamp) {
+        @Schema(description = "Time of the query") Instant timestamp,
+        @JsonProperty("updated_at") @Schema(description = "Time of the latest account summary update received from "
+                + "TWS. TWS sends the changes every 3 minutes.") Instant updatedAt) {
 }

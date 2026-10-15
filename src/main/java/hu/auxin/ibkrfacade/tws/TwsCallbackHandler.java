@@ -14,6 +14,7 @@ import com.ib.client.TickAttribBidAsk;
 import com.ib.client.TickType;
 import com.ib.client.Bar;
 import com.ib.client.NewsProvider;
+import hu.auxin.ibkrfacade.account.AccountService;
 import hu.auxin.ibkrfacade.account.AccountValue;
 import hu.auxin.ibkrfacade.data.holder.OptionParameters;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
@@ -41,16 +42,19 @@ public class TwsCallbackHandler extends DefaultEWrapper {
     private final OrderManagerService orderManagerService;
     private final PositionManagerService positionManagerService;
     private final NewsService newsService;
+    private final AccountService accountService;
 
     public TwsCallbackHandler(TwsConnection connection, TwsRequestRegistry requestRegistry,
                               MarketDataService marketDataService, OrderManagerService orderManagerService,
-                              PositionManagerService positionManagerService, NewsService newsService) {
+                              PositionManagerService positionManagerService, NewsService newsService,
+                              AccountService accountService) {
         this.connection = connection;
         this.requestRegistry = requestRegistry;
         this.marketDataService = marketDataService;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.newsService = newsService;
+        this.accountService = accountService;
     }
 
     // -- connection
@@ -75,6 +79,11 @@ public class TwsCallbackHandler extends DefaultEWrapper {
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
         marketDataService.onTick(tickerId, field, price);
+    }
+
+    @Override
+    public void marketDataType(int reqId, int marketDataType) {
+        marketDataService.onMarketDataType(reqId, marketDataType);
     }
 
     @Override
@@ -161,12 +170,12 @@ public class TwsCallbackHandler extends DefaultEWrapper {
 
     @Override
     public void accountSummary(int reqId, String account, String tag, String value, String currency) {
-        requestRegistry.addItem(reqId, new AccountValue(account, tag, value, currency));
+        accountService.onAccountSummary(reqId, new AccountValue(account, tag, value, currency));
     }
 
     @Override
     public void accountSummaryEnd(int reqId) {
-        requestRegistry.complete(reqId);
+        accountService.onAccountSummaryEnd(reqId);
     }
 
     // -- historical data
@@ -246,6 +255,9 @@ public class TwsCallbackHandler extends DefaultEWrapper {
             return;
         }
         if (marketDataService.onStreamError(id, errorCode, errorMsg)) {
+            return;
+        }
+        if (accountService.onError(id, errorCode, errorMsg)) {
             return;
         }
         if (id < 0 || TwsErrorCodes.isConnectionError(errorCode)) {

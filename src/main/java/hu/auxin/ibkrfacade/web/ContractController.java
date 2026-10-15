@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 
@@ -54,17 +56,24 @@ public class ContractController {
         return ContractDto.of(contractManagerService.getContractHolder(conid));
     }
 
-    @Operation(summary = "Returns the last available bid, ask and last price by conid. The prices are null if there's "
-            + "no market data subscription, or no tick arrived yet.")
+    @Operation(summary = "Returns the last available bid, ask and last price by conid. Without a market data "
+            + "subscription it subscribes, and waits at most IBKR_PRICE_QUOTE_WAIT (3s) for the first quote. The "
+            + "prices are null if no tick arrived yet. Check stale / quote_age_seconds: the price may be old, eg. "
+            + "outside of the trading hours. With max_age an older price is rejected with 422 STALE_MARKET_DATA.")
     @GetMapping("/price/{conid}")
-    MarketPrice getLastPriceByConid(@Parameter(description = "The conid (IBKR unique id) of the instrument") @PathVariable int conid) {
-        return contractManagerService.getLastPriceByConid(conid);
+    MarketPrice getLastPriceByConid(@Parameter(description = "The conid (IBKR unique id) of the instrument") @PathVariable int conid,
+                                    @Parameter(description = "Maximum age of the bid/ask in seconds")
+                                    @RequestParam(name = "max_age", required = false) @Positive Integer maxAge) {
+        return contractManagerService.getLastPriceByConid(conid, seconds(maxAge));
     }
 
-    @Operation(summary = "Returns the last available bid, ask and last price for the given contract (only the conid is used).")
+    @Operation(summary = "Returns the last available bid, ask and last price for the given contract (only the conid "
+            + "is used). Works like GET /price/{conid}.")
     @PostMapping("/price")
-    MarketPrice getLastPriceByContract(@RequestBody ContractDto contract) {
-        return contractManagerService.getLastPriceByConid(contract.conid());
+    MarketPrice getLastPriceByContract(@RequestBody ContractDto contract,
+                                       @Parameter(description = "Maximum age of the bid/ask in seconds")
+                                       @RequestParam(name = "max_age", required = false) @Positive Integer maxAge) {
+        return contractManagerService.getLastPriceByConid(contract.conid(), seconds(maxAge));
     }
 
     @Operation(summary = "Returns the option chain for an underlying instrument. This method won't subscribe to the "
@@ -72,5 +81,9 @@ public class ContractController {
     @GetMapping("/optionChain/{underlyingConid}")
     Collection<Option> getOptionChain(@Parameter(description = "The conid (IBKR unique id) of the underlying instrument") @PathVariable int underlyingConid) {
         return contractManagerService.getOptionChainByConid(underlyingConid);
+    }
+
+    private static Duration seconds(Integer seconds) {
+        return seconds == null ? null : Duration.ofSeconds(seconds);
     }
 }

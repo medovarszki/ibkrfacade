@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * Market data subscriptions. The ticks are written to RedisTimeSeries under stream:[conid]:[BID|ASK|LAST].
@@ -36,20 +37,27 @@ public class MarketDataService {
      */
     private final int marketDataType;
     private final boolean tickByTick;
+    /**
+     * A quote older than this is reported as stale
+     */
+    private final Duration staleAfter;
 
     private final Map<Integer, Contract> contractsByTicker = new ConcurrentHashMap<>();
     private final Map<Integer, Integer> tickerByConid = new ConcurrentHashMap<>();
     private final Map<Integer, String> streamErrors = new ConcurrentHashMap<>();
+    private final Map<Integer, MarketDataType> marketDataTypes = new ConcurrentHashMap<>();
 
     public MarketDataService(TwsConnection connection, TwsRequestRegistry requestRegistry,
                              TimeSeriesHandler timeSeriesHandler,
                              @Value("${ibkr.market-data-type:1}") int marketDataType,
-                             @Value("${ibkr.tick-by-tick-stream:false}") boolean tickByTick) {
+                             @Value("${ibkr.tick-by-tick-stream:false}") boolean tickByTick,
+                             @Value("${ibkr.price.stale-after:${ibkr.order.max-quote-age:15m}}") Duration staleAfter) {
         this.connection = connection;
         this.requestRegistry = requestRegistry;
         this.timeSeriesHandler = timeSeriesHandler;
         this.marketDataType = marketDataType;
         this.tickByTick = tickByTick;
+        this.staleAfter = staleAfter;
     }
 
     /**
@@ -72,6 +80,7 @@ public class MarketDataService {
         contractsByTicker.put(tickerId, contract);
         tickerByConid.put(contract.conid(), tickerId);
         streamErrors.remove(contract.conid());
+        marketDataTypes.remove(contract.conid());
         request(client, tickerId, contract);
         log.info("Subscribed to market data of {} (conid={}, tickerId={})", contract.symbol(), contract.conid(), tickerId);
         return tickerId;
@@ -85,8 +94,8 @@ public class MarketDataService {
         TSElement bid = timeSeriesHandler.latest(conid, TickType.BID);
         TSElement ask = timeSeriesHandler.latest(conid, TickType.ASK);
         TSElement last = timeSeriesHandler.latest(conid, TickType.LAST);
-        return new MarketPrice(conid, value(bid), value(ask), value(last), time(bid), time(ask), time(last),
-                isSubscribed(conid), streamErrors.get(conid));
+        return MarketPrice.of(conid, value(bid), value(ask), value(last), time(bid), time(ask), time(last),
+                isSubscribed(conid), streamErrors.get(conid), marketDataTypes.get(conid), Instant.now(), staleAfter);
     }
 
     /**
@@ -94,16 +103,28 @@ public class MarketDataService {
      */
     public MarketPrice awaitQuote(Contract contract, Duration maxAge, Duration maxWait) {
         subscribe(contract);
+        return await(contract.conid(), price -> price.hasQuote(maxAge, Instant.now()), maxWait);
+    }
+
+    /**
+     * Waits at most maxWait for a bid or ask which arrived at or after the given time, eg. the first quote of a new
+     * subscription. Returns the latest price (possibly an older quote) when no such quote arrives in time.
+     */
+    public MarketPrice awaitQuoteSince(int conid, Instant since, Duration maxWait) {
+        return await(conid, price -> price.quoteTime() != null && !price.quoteTime().isBefore(since), maxWait);
+    }
+
+    private MarketPrice await(int conid, Predicate<MarketPrice> done, Duration maxWait) {
         long deadline = System.nanoTime() + maxWait.toNanos();
-        MarketPrice price = latestPrice(contract.conid());
-        while (!price.hasQuote(maxAge, Instant.now()) && price.streamError() == null && System.nanoTime() < deadline) {
+        MarketPrice price = latestPrice(conid);
+        while (!done.test(price) && price.streamError() == null && System.nanoTime() < deadline) {
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
-            price = latestPrice(contract.conid());
+            price = latestPrice(conid);
         }
         return price;
     }
@@ -135,6 +156,21 @@ public class MarketDataService {
             return false;
         }
         streamErrors.put(contract.conid(), code + ": " + message);
+        return true;
+    }
+
+    /**
+     * @return false if the ticker id does not belong to a market data subscription
+     */
+    public boolean onMarketDataType(int tickerId, int type) {
+        Contract contract = contractsByTicker.get(tickerId);
+        if (contract == null) {
+            return false;
+        }
+        MarketDataType marketDataType = MarketDataType.of(type);
+        if (marketDataType != null && marketDataTypes.put(contract.conid(), marketDataType) != marketDataType) {
+            log.info("Market data type of {} (conid={}): {}", contract.symbol(), contract.conid(), marketDataType);
+        }
         return true;
     }
 
