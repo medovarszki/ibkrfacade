@@ -13,13 +13,14 @@ public final class Decimals {
     }
 
     /**
-     * @return null for null, invalid or NaN values
+     * @return null for null, invalid or NaN values; without trailing zeros, but never in exponent form (520, not 5.2E+2)
      */
     public static BigDecimal toBigDecimal(Decimal decimal) {
         if (decimal == null || !decimal.isValid()) {
             return null;
         }
-        return decimal.value().stripTrailingZeros();
+        BigDecimal value = decimal.value().stripTrailingZeros();
+        return value.scale() < 0 ? value.setScale(0) : value;
     }
 
     public static double toDouble(Decimal decimal) {
