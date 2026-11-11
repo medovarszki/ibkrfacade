@@ -18,6 +18,7 @@ import hu.auxin.ibkrfacade.account.AccountService;
 import hu.auxin.ibkrfacade.account.AccountValue;
 import hu.auxin.ibkrfacade.data.holder.OptionParameters;
 import hu.auxin.ibkrfacade.data.holder.PositionHolder;
+import hu.auxin.ibkrfacade.marketdata.ComboMarketDataService;
 import hu.auxin.ibkrfacade.marketdata.MarketDataService;
 import hu.auxin.ibkrfacade.news.NewsService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
@@ -39,18 +40,21 @@ public class TwsCallbackHandler extends DefaultEWrapper {
     private final TwsConnection connection;
     private final TwsRequestRegistry requestRegistry;
     private final MarketDataService marketDataService;
+    private final ComboMarketDataService comboMarketDataService;
     private final OrderManagerService orderManagerService;
     private final PositionManagerService positionManagerService;
     private final NewsService newsService;
     private final AccountService accountService;
 
     public TwsCallbackHandler(TwsConnection connection, TwsRequestRegistry requestRegistry,
-                              MarketDataService marketDataService, OrderManagerService orderManagerService,
+                              MarketDataService marketDataService,
+                              ComboMarketDataService comboMarketDataService, OrderManagerService orderManagerService,
                               PositionManagerService positionManagerService, NewsService newsService,
                               AccountService accountService) {
         this.connection = connection;
         this.requestRegistry = requestRegistry;
         this.marketDataService = marketDataService;
+        this.comboMarketDataService = comboMarketDataService;
         this.orderManagerService = orderManagerService;
         this.positionManagerService = positionManagerService;
         this.newsService = newsService;
@@ -78,12 +82,23 @@ public class TwsCallbackHandler extends DefaultEWrapper {
 
     @Override
     public void tickPrice(int tickerId, int field, double price, TickAttrib attribs) {
-        marketDataService.onTick(tickerId, field, price);
+        if (!marketDataService.onTick(tickerId, field, price)) {
+            comboMarketDataService.onTick(tickerId, field, price);
+        }
+    }
+
+    @Override
+    public void tickSize(int tickerId, int field, Decimal size) {
+        if (!marketDataService.onTickSize(tickerId, field, size)) {
+            comboMarketDataService.onTickSize(tickerId, field, size);
+        }
     }
 
     @Override
     public void marketDataType(int reqId, int marketDataType) {
-        marketDataService.onMarketDataType(reqId, marketDataType);
+        if (!marketDataService.onMarketDataType(reqId, marketDataType)) {
+            comboMarketDataService.onMarketDataType(reqId, marketDataType);
+        }
     }
 
     @Override
@@ -91,6 +106,8 @@ public class TwsCallbackHandler extends DefaultEWrapper {
                                  Decimal askSize, TickAttribBidAsk tickAttribBidAsk) {
         marketDataService.onTick(reqId, TickType.BID.index(), bidPrice);
         marketDataService.onTick(reqId, TickType.ASK.index(), askPrice);
+        marketDataService.onTickSize(reqId, TickType.BID_SIZE.index(), bidSize);
+        marketDataService.onTickSize(reqId, TickType.ASK_SIZE.index(), askSize);
     }
 
     // -- contracts
@@ -254,7 +271,8 @@ public class TwsCallbackHandler extends DefaultEWrapper {
         if (id >= 0 && requestRegistry.fail(id, new TwsException(errorCode, errorMsg))) {
             return;
         }
-        if (marketDataService.onStreamError(id, errorCode, errorMsg)) {
+        if (marketDataService.onStreamError(id, errorCode, errorMsg)
+                || comboMarketDataService.onStreamError(id, errorCode, errorMsg)) {
             return;
         }
         if (accountService.onError(id, errorCode, errorMsg)) {

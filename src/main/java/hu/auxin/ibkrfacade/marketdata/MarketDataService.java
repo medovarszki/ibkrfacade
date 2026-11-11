@@ -1,8 +1,10 @@
 package hu.auxin.ibkrfacade.marketdata;
 
 import com.ib.client.Contract;
+import com.ib.client.Decimal;
 import com.ib.client.EClientSocket;
 import com.ib.client.TickType;
+import com.ib.client.Types;
 import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.tws.TwsConnectedEvent;
 import hu.auxin.ibkrfacade.tws.TwsConnection;
@@ -22,11 +24,14 @@ import java.util.function.Predicate;
 
 /**
  * Market data subscriptions. The ticks are written to RedisTimeSeries under stream:[conid]:[BID|ASK|LAST].
+ * The sizes, volume, open interest and the previous close are kept in memory only.
  * Subscriptions are restored automatically after a reconnection.
  */
 @Slf4j
 @Service
 public class MarketDataService {
+
+    private static final String FUTURES_OPEN_INTEREST_TICK = "588";
 
     private final TwsConnection connection;
     private final TwsRequestRegistry requestRegistry;
@@ -46,6 +51,10 @@ public class MarketDataService {
     private final Map<Integer, Integer> tickerByConid = new ConcurrentHashMap<>();
     private final Map<Integer, String> streamErrors = new ConcurrentHashMap<>();
     private final Map<Integer, MarketDataType> marketDataTypes = new ConcurrentHashMap<>();
+    /**
+     * Sizes and daily statistics by conid, in memory only
+     */
+    private final Map<Integer, LiveQuote> quotes = new ConcurrentHashMap<>();
 
     public MarketDataService(TwsConnection connection, TwsRequestRegistry requestRegistry,
                              TimeSeriesHandler timeSeriesHandler,
@@ -94,8 +103,20 @@ public class MarketDataService {
         TSElement bid = timeSeriesHandler.latest(conid, TickType.BID);
         TSElement ask = timeSeriesHandler.latest(conid, TickType.ASK);
         TSElement last = timeSeriesHandler.latest(conid, TickType.LAST);
+        LiveQuote quote = quotes.get(conid);
         return MarketPrice.of(conid, value(bid), value(ask), value(last), time(bid), time(ask), time(last),
-                isSubscribed(conid), streamErrors.get(conid), marketDataTypes.get(conid), Instant.now(), staleAfter);
+                isSubscribed(conid), streamErrors.get(conid), marketDataTypes.get(conid), Instant.now(), staleAfter,
+                quoteBasis(conid), quote == null ? MarketStats.EMPTY : quote.stats());
+    }
+
+    /**
+     * Indices have no bid/ask, their freshness is based on the latest value of the index.
+     */
+    private MarketPrice.QuoteBasis quoteBasis(int conid) {
+        Integer tickerId = tickerByConid.get(conid);
+        Contract contract = tickerId == null ? null : contractsByTicker.get(tickerId);
+        return contract != null && contract.secType() == Types.SecType.IND
+                ? MarketPrice.QuoteBasis.LAST : MarketPrice.QuoteBasis.BID_ASK;
     }
 
     /**
@@ -139,12 +160,35 @@ public class MarketDataService {
         if (contract == null) {
             return false;
         }
-        TickType side = side(TickType.get(field));
-        if (side != null && price > 0) {
-            timeSeriesHandler.addToStream(contract.conid(), price, side);
-            streamErrors.remove(contract.conid());
+        TickType tickType = TickType.get(field);
+        TickType side = side(tickType);
+        if (price > 0) {
+            if (side != null) {
+                timeSeriesHandler.addToStream(contract.conid(), price, side);
+                streamErrors.remove(contract.conid());
+            } else {
+                quote(contract.conid()).price(tickType, price, Instant.now());
+            }
         }
         return true;
+    }
+
+    /**
+     * Sizes, volume and open interest.
+     *
+     * @return false if the ticker id does not belong to a market data subscription
+     */
+    public boolean onTickSize(int tickerId, int field, Decimal size) {
+        Contract contract = contractsByTicker.get(tickerId);
+        if (contract == null) {
+            return false;
+        }
+        quote(contract.conid()).size(TickType.get(field), size);
+        return true;
+    }
+
+    private LiveQuote quote(int conid) {
+        return quotes.computeIfAbsent(conid, key -> new LiveQuote());
     }
 
     /**
@@ -197,8 +241,15 @@ public class MarketDataService {
         if (tickByTick) {
             client.reqTickByTickData(tickerId, contract, "BidAsk", 0, false);
         } else {
-            client.reqMktData(tickerId, contract, "", false, false, null);
+            client.reqMktData(tickerId, contract, genericTicks(contract), false, false, null);
         }
+    }
+
+    /**
+     * The open interest of futures is not part of the default tick set.
+     */
+    static String genericTicks(Contract contract) {
+        return contract.secType() == Types.SecType.FUT ? FUTURES_OPEN_INTEREST_TICK : "";
     }
 
     private void cancel(EClientSocket client, int tickerId) {

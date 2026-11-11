@@ -2,6 +2,7 @@ package hu.auxin.ibkrfacade.history;
 
 import com.ib.client.Bar;
 import com.ib.client.Contract;
+import com.ib.client.Types;
 import hu.auxin.ibkrfacade.data.holder.ContractHolder;
 import hu.auxin.ibkrfacade.service.ContractManagerService;
 import hu.auxin.ibkrfacade.tws.Decimals;
@@ -67,6 +68,10 @@ public class HistoryService {
         Contract contract = holder.getContract();
         if (!StringUtils.hasText(contract.exchange())) {
             contract.exchange(StringUtils.hasText(contract.primaryExch()) ? contract.primaryExch() : "SMART");
+        }
+        if (contract.secType() == Types.SecType.FUT) {
+            // the history of an expired future is only served with includeExpired
+            contract.includeExpired(true);
         }
         String timeZoneId = holder.getDetails() != null ? holder.getDetails().timeZoneId() : null;
         ZoneId zone = zone(timeZoneId);

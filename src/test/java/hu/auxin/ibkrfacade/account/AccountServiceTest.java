@@ -5,6 +5,7 @@ import hu.auxin.ibkrfacade.tws.AccountMode;
 import hu.auxin.ibkrfacade.tws.TwsConnection;
 import hu.auxin.ibkrfacade.tws.TwsRequestRegistry;
 import hu.auxin.ibkrfacade.web.ApiException;
+import hu.auxin.ibkrfacade.marketdata.ComboMarketDataService;
 import hu.auxin.ibkrfacade.marketdata.MarketDataService;
 import hu.auxin.ibkrfacade.news.NewsService;
 import hu.auxin.ibkrfacade.service.OrderManagerService;
@@ -38,7 +39,7 @@ class AccountServiceTest {
     private final EClientSocket client = mock(EClientSocket.class);
     private final AccountService service = new AccountService(connection, registry, Duration.ofSeconds(2));
     private final TwsCallbackHandler handler = new TwsCallbackHandler(connection, registry,
-            mock(MarketDataService.class), mock(OrderManagerService.class), mock(PositionManagerService.class),
+            mock(MarketDataService.class), mock(ComboMarketDataService.class), mock(OrderManagerService.class), mock(PositionManagerService.class),
             mock(NewsService.class), service);
 
     @Test

@@ -23,6 +23,12 @@ public record ContractDto(
         @JsonProperty("trading_class") String tradingClass,
         String multiplier,
         @JsonProperty("last_trade_date") String lastTradeDate,
+        @Schema(description = "Time of the last trade on the last trade date, in the time zone of the exchange")
+        @JsonProperty("last_trade_time") String lastTradeTime,
+        @Schema(description = "Contract month of a future or option (yyyyMM)") @JsonProperty("contract_month") String contractMonth,
+        @Schema(description = "Expiration date (yyyyMMdd), it may differ from the last trade date")
+        @JsonProperty("real_expiration_date") String realExpirationDate,
+        @Schema(description = "Conid of the underlying of a derivative") @JsonProperty("underlying_conid") Integer underlyingConid,
         Double strike,
         String right,
         String description,
@@ -51,7 +57,12 @@ public record ContractDto(
     public static ContractDto of(Contract c, ContractDetails d, Integer streamRequestId) {
         return new ContractDto(c.conid(), c.symbol(), c.getSecType(), empty(c.exchange()), empty(c.primaryExch()),
                 c.currency(), empty(c.localSymbol()), empty(c.tradingClass()), empty(c.multiplier()),
-                empty(c.lastTradeDateOrContractMonth()), price(c.strike()), empty(c.getRight()),
+                empty(c.lastTradeDateOrContractMonth()),
+                d == null ? null : empty(d.lastTradeTime()),
+                d == null ? null : empty(d.contractMonth()),
+                d == null ? null : empty(d.realExpirationDate()),
+                d == null || d.underConid() <= 0 ? null : d.underConid(),
+                price(c.strike()), empty(c.getRight()),
                 empty(c.description()),
                 d == null ? null : empty(d.longName()),
                 d == null ? null : empty(d.timeZoneId()),

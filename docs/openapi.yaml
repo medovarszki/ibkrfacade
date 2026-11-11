@@ -141,6 +141,39 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ContractDto"
+  /spread:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Calendar spread of two futures (far - near): the spread computed from\
+        \ the bid/ask of the legs, and the quote of the exchange listed spread. Only\
+        \ the most recently requested spreads (IBKR_SPREAD_MAX_SUBSCRIPTIONS, 10)\
+        \ keep their market data subscription."
+      operationId: getSpread
+      parameters:
+      - name: near
+        in: query
+        description: Conid of the near (sold) leg
+        required: true
+        schema:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+      - name: far
+        in: query
+        description: Conid of the far (bought) leg
+        required: true
+        schema:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SpreadQuote"
   /search:
     get:
       tags:
@@ -170,6 +203,38 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ContractDto"
+  /prices:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Latest prices of several instruments in the order of the conids, like\
+        \ GET /price/{conid}. The ones without a market data subscription are subscribed,\
+        \ and the request waits at most IBKR_PRICE_QUOTE_WAIT (3s) altogether for\
+        \ their first quotes. Every subscription uses a market data line of the account."
+      operationId: getPrices
+      parameters:
+      - name: conids
+        in: query
+        description: "Comma separated conids, at most 100"
+        required: true
+        schema:
+          type: array
+          items:
+            type: integer
+            format: int32
+            exclusiveMinimum: 0
+          maxItems: 100
+          minItems: 1
+        example: "265598,272093"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarketPrice"
   /price/{conid}:
     get:
       tags:
@@ -482,6 +547,62 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/HistoryResponse"
+  /futures/chain:
+    get:
+      tags:
+      - Contracts and market data
+      summary: "Futures of an underlying ordered by expiration, eg. symbol=VIX, exchange=CFE,\
+        \ trading_class=VX for the monthly VIX futures. underlying_conid is the conid\
+        \ of the underlying index."
+      operationId: getFuturesChain
+      parameters:
+      - name: symbol
+        in: query
+        description: Symbol of the underlying
+        required: true
+        schema:
+          type: string
+          minLength: 1
+        example: VIX
+      - name: exchange
+        in: query
+        description: Exchange of the futures
+        required: true
+        schema:
+          type: string
+          minLength: 1
+        example: CFE
+      - name: trading_class
+        in: query
+        description: "Trading class, eg. VX for the monthly VIX futures (the weekly\
+          \ ones are VX01..VX53)"
+        required: false
+        schema:
+          type: string
+        example: VX
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+        example: USD
+      - name: include_expired
+        in: query
+        description: With the expired contracts (TWS knows the ones expired in the
+          last two years)
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContractDto"
   /contract/{conid}:
     get:
       tags:
@@ -585,6 +706,21 @@ components:
           type: string
         last_trade_date:
           type: string
+        last_trade_time:
+          type: string
+          description: "Time of the last trade on the last trade date, in the time\
+            \ zone of the exchange"
+        contract_month:
+          type: string
+          description: Contract month of a future or option (yyyyMM)
+        real_expiration_date:
+          type: string
+          description: "Expiration date (yyyyMMdd), it may differ from the last trade\
+            \ date"
+        underlying_conid:
+          type: integer
+          format: int32
+          description: Conid of the underlying of a derivative
         strike:
           type: number
           format: double
@@ -678,6 +814,53 @@ components:
           description: "True if there is no bid or ask, or the latest one is older\
             \ than the staleness threshold (IBKR_PRICE_STALE_AFTER, default IBKR_ORDER_MAX_QUOTE_AGE\
             \ = 15m)"
+        quote_basis:
+          type: string
+          description: "What quote_time, quote_age_seconds and stale are based on:\
+            \ BID_ASK, or LAST for instruments without bid/ask (indices)"
+          enum:
+          - BID_ASK
+          - LAST
+        bid_size:
+          type: number
+          description: "Size of the bid, null if unknown"
+        ask_size:
+          type: number
+          description: "Size of the ask, null if unknown"
+        last_size:
+          type: number
+          description: "Size of the latest trade, null if unknown"
+        volume:
+          type: number
+          description: "Volume of the day, null if unknown"
+        open_interest:
+          type: number
+          description: "Open interest (futures, options), null if unknown"
+        close:
+          type: number
+          format: double
+          description: "Previous close, for futures the previous settlement price;\
+            \ null if unknown"
+        open:
+          type: number
+          format: double
+          description: "Open of the day, null if unknown"
+        high:
+          type: number
+          format: double
+          description: "High of the day, null if unknown"
+        low:
+          type: number
+          format: double
+          description: "Low of the day, null if unknown"
+        mid:
+          type: number
+          format: double
+          description: "(bid + ask) / 2, null without both sides"
+        spread:
+          type: number
+          format: double
+          description: "ask - bid, null without both sides"
         quote_time:
           type: string
           format: date-time
@@ -876,6 +1059,122 @@ components:
           type: boolean
           description: True if the response belongs to an earlier request with the
             same client_order_id (no new order was placed)
+    Native:
+      type: object
+      description: Quote of the exchange listed spread. The prices may be negative
+        or zero.
+      properties:
+        bid:
+          type: number
+          format: double
+        ask:
+          type: number
+          format: double
+        mid:
+          type: number
+          format: double
+          description: "(bid + ask) / 2, null without both sides"
+        last:
+          type: number
+          format: double
+        close:
+          type: number
+          format: double
+          description: "Previous close of the spread, null if unknown"
+        bid_size:
+          type: number
+        ask_size:
+          type: number
+        last_size:
+          type: number
+        volume:
+          type: number
+        bid_time:
+          type: string
+          format: date-time
+        ask_time:
+          type: string
+          format: date-time
+        last_time:
+          type: string
+          format: date-time
+        quote_age_seconds:
+          type: integer
+          format: int64
+          description: "Age of the latest bid or ask in whole seconds, null if there\
+            \ is no quote"
+        stale:
+          type: boolean
+          description: "True if there is no bid or ask, or the latest one is older\
+            \ than the staleness threshold"
+        subscribed:
+          type: boolean
+          description: True if the facade has an active market data subscription for
+            the spread
+        stream_error:
+          type: string
+          description: "Last error reported by TWS for the subscription, or the reason\
+            \ why there is none"
+        market_data_type:
+          type: string
+          enum:
+          - LIVE
+          - FROZEN
+          - DELAYED
+          - DELAYED_FROZEN
+    SpreadQuote:
+      type: object
+      description: "Calendar spread of two futures: far leg minus near leg. Buying\
+        \ the spread is buying the far and selling the near leg."
+      properties:
+        near_conid:
+          type: integer
+          format: int32
+        far_conid:
+          type: integer
+          format: int32
+        near:
+          $ref: "#/components/schemas/MarketPrice"
+          description: Price of the near leg
+        far:
+          $ref: "#/components/schemas/MarketPrice"
+          description: Price of the far leg
+        synthetic:
+          $ref: "#/components/schemas/Synthetic"
+          description: Spread computed from the quotes of the legs
+        native:
+          $ref: "#/components/schemas/Native"
+          description: Quote of the exchange listed spread (combo) book
+    Synthetic:
+      type: object
+      description: "Spread computed from the legs, null values if a leg has no such\
+        \ price"
+      properties:
+        bid:
+          type: number
+          format: double
+          description: "Price the spread can be sold at: far bid - near ask"
+        ask:
+          type: number
+          format: double
+          description: "Price the spread can be bought at: far ask - near bid"
+        mid:
+          type: number
+          format: double
+          description: (bid + ask) / 2
+        last:
+          type: number
+          format: double
+          description: "far last - near last, the two trades may be from different\
+            \ times"
+        close:
+          type: number
+          format: double
+          description: "far close - near close: the spread of the previous settlement\
+            \ prices"
+        stale:
+          type: boolean
+          description: True if the quote of any leg is stale
     PositionHolder:
       type: object
       description: Represents an open position

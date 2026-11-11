@@ -88,6 +88,33 @@ class HistoryServiceTest {
         assertThat(response.symbol()).isEqualTo("AAPL");
         assertThat(response.bars()).extracting(HistoricalBar::time).containsExactly("2026-10-13", "2026-10-14");
         assertThat(contract.exchange()).isEqualTo("SMART");
+        assertThat(contract.includeExpired()).isFalse();
+    }
+
+    @Test
+    void expiredFuturesAreRequestedWithIncludeExpired() {
+        TwsRequestRegistry registry = new TwsRequestRegistry(Duration.ofSeconds(2));
+        TwsConnection connection = mock(TwsConnection.class);
+        EClientSocket client = mock(EClientSocket.class);
+        when(connection.client()).thenReturn(client);
+        ContractManagerService contracts = mock(ContractManagerService.class);
+        Contract contract = new Contract();
+        contract.conid(1001);
+        contract.symbol("VIX");
+        contract.secType(com.ib.client.Types.SecType.FUT);
+        contract.exchange("CFE");
+        when(contracts.getContractHolder(1001)).thenReturn(new ContractHolder(contract));
+        doAnswer(invocation -> {
+            registry.complete(invocation.getArgument(0));
+            return null;
+        }).when(client).reqHistoricalData(anyInt(), any(Contract.class), any(), any(), any(), any(), anyInt(),
+                anyInt(), eq(false), isNull());
+
+        new HistoryService(connection, registry, contracts, Duration.ofSeconds(2))
+                .getHistory(1001, "1 M", "1 day", "TRADES", true, "20261014-20:00:00");
+
+        assertThat(contract.includeExpired()).isTrue();
+        assertThat(contract.exchange()).isEqualTo("CFE");
     }
 
     private static Bar bar(String time) {

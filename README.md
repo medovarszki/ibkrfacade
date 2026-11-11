@@ -12,7 +12,9 @@ Docker network, in front of a containerized IB Gateway (paper account by default
 
 - The TWS API exposed to a REST API ([OpenAPI spec](docs/openapi.yaml), Swagger UI at `/ibkr/swagger-ui/index.html`)
     - instrument search, contract details, option chain
-    - market data subscription and latest prices, historical OHLCV bars
+    - market data subscription and latest prices (with sizes, volume, open interest, previous close), historical
+      OHLCV bars
+    - futures chain, calendar spread quotes (from the legs and from the exchange listed spread)
     - account summary (NAV, cash, buying power, margin), positions with market value and P&L
     - **idempotent** order placement, order status with fills and commissions, cancellation
     - news providers, headlines and articles (if the account has news subscriptions)
@@ -120,6 +122,7 @@ Every property can be set through environment variables (Spring relaxed binding)
 | `IBKR_MARKET_DATA_TYPE` | `1` | 1 live, 2 frozen, 3 delayed, 4 delayed frozen |
 | `IBKR_PRICE_STALE_AFTER` | `IBKR_ORDER_MAX_QUOTE_AGE` | `GET /price` reports `stale: true` if the latest bid/ask is older than this |
 | `IBKR_PRICE_QUOTE_WAIT` | `3s` | How long `GET /price` waits for the first quote of a not yet subscribed instrument |
+| `IBKR_SPREAD_MAX_SUBSCRIPTIONS` | `10` | Market data subscriptions kept for exchange listed spreads (`GET /spread`) |
 | `IBKR_ORDER_MAX_QUOTE_AGE` | `15m` | An order needs a bid/ask not older than this (`0` disables the age check) |
 | `IBKR_ORDER_QUOTE_WAIT` | `3s` | How long to wait for the first quote of a not yet subscribed instrument |
 | `IBKR_ORDER_IDEMPOTENCY_TTL` | `30d` | How long a `client_order_id` is kept in Redis |
@@ -148,6 +151,9 @@ with a machine readable `code`:
 | GET | `/contract/{conid}/session?hours=liquid` | Market open / `next_open` / `next_close`, see [Trading session](#trading-session) |
 | GET | `/subscribe/{conid}` | Market data subscription (stream into Redis) |
 | GET | `/price/{conid}?max_age=` | Latest bid / ask / last with timestamps and freshness, see [Prices](#prices) |
+| GET | `/prices?conids=1,2,3` | Latest prices of several instruments (at most 100) in one request |
+| GET | `/futures/chain?symbol=VIX&exchange=CFE&trading_class=VX&include_expired=false` | Futures of an underlying ordered by expiration, see [Futures](#futures-and-calendar-spreads) |
+| GET | `/spread?near={conid}&far={conid}` | Calendar spread of two futures, see [Futures](#futures-and-calendar-spreads) |
 | GET | `/history/{conid}?duration=1 M&barSize=1 day&whatToShow=TRADES&useRth=true` | OHLCV bars, times in the exchange time zone |
 | GET | `/optionChain/{conid}` | Option chain of an underlying |
 | GET | `/account/summary?account=` | NAV, cash, available funds, buying power, margin requirements, currency, `timestamp` (query), `updated_at` (last update from TWS) |
@@ -174,6 +180,40 @@ with a machine readable `code`:
 - `market_data_type`: `LIVE`, `FROZEN`, `DELAYED` or `DELAYED_FROZEN`, as reported by TWS for the subscription.
   A paper account without shared live market data gets `DELAYED` data.
 - An unknown conid is 404 `CONTRACT_NOT_FOUND`.
+- `bid_size`, `ask_size`, `last_size`, `volume`, `open_interest`, `close` (previous close, for futures the
+  previous settlement price), `open`, `high`, `low` are the latest values sent by TWS. They are kept in memory only:
+  null after a restart of the facade until TWS sends them again. `mid` and `spread` (ask - bid) are computed.
+- Indices have no bid/ask: their `quote_basis` is `LAST`, so `quote_time`, `quote_age_seconds` and `stale` are
+  based on the latest value of the index (`last`).
+- `GET /prices?conids=` returns the same for several instruments in the order of the conids. The ones without
+  subscription are subscribed, the request waits at most `IBKR_PRICE_QUOTE_WAIT` altogether for their first quotes.
+  Every subscription uses a market data line of the account (100 by default).
+
+### Futures and calendar spreads
+
+`GET /futures/chain?symbol=VIX&exchange=CFE&trading_class=VX` lists the futures of an underlying ordered by
+expiration (`last_trade_date`, `contract_month`, `real_expiration_date`, `local_symbol`, `multiplier`, `min_tick`),
+`underlying_conid` is the conid of the underlying index. Without `trading_class` every future of the symbol is
+returned: for VIX `VX` is the monthly contract, `VX01`..`VX53` are the weekly ones. With `include_expired=true` the
+expired contracts are listed too (TWS knows the ones expired in the last two years); `GET /history/{conid}` works
+for them, pass an `endDateTime` not later than the expiration.
+
+`GET /spread?near={conid}&far={conid}` is the calendar spread of two futures of the same underlying, quoted as far
+minus near (buying the spread = buying the far, selling the near leg):
+
+```json
+{"near_conid": 1001, "far_conid": 1002, "near": {"bid": 17.05, "ask": 17.1, "...": "..."}, "far": {"bid": 18.35, "ask": 18.4, "...": "..."},
+ "synthetic": {"bid": 1.25, "ask": 1.35, "mid": 1.3, "last": 1.25, "close": 1.2, "stale": false},
+ "native": {"bid": 1.29, "ask": 1.31, "mid": 1.3, "bid_size": 85, "ask_size": 60, "stale": false, "subscribed": true, "stream_error": null, "...": "..."}}
+```
+
+- `synthetic` is computed from the legs: `ask` = far ask - near bid (the price the spread can be bought at with two
+  orders), `bid` = far bid - near ask, `close` = the spread of the previous settlement prices.
+- `native` is the quote of the exchange listed spread (a TWS combo: BUY 1 far, SELL 1 near), usually tighter than
+  the synthetic one. Its prices may be zero or negative. The quote is kept in memory only, and only the
+  `IBKR_SPREAD_MAX_SUBSCRIPTIONS` (10) most recently requested spreads stay subscribed. The first request of a
+  spread waits at most `IBKR_PRICE_QUOTE_WAIT` for its first quote.
+- 400 `INVALID_SPREAD` if the legs are not two different futures of the same underlying and exchange.
 
 ### Trading session
 
