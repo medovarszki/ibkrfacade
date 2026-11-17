@@ -28,6 +28,7 @@ final class LiveQuote {
     private Double open;
     private Double high;
     private Double low;
+    private OptionGreeks modelGreeks = OptionGreeks.EMPTY;
 
     /**
      * @return false if the tick type is not stored
@@ -70,6 +71,14 @@ final class LiveQuote {
             }
         }
         return true;
+    }
+
+    synchronized void modelGreeks(OptionGreeks greeks) {
+        modelGreeks = greeks;
+    }
+
+    synchronized OptionGreeks modelGreeks() {
+        return modelGreeks;
     }
 
     synchronized MarketStats stats() {

@@ -19,6 +19,7 @@ class ApiTokenFilterTest {
     void readTokenCanReadButCannotTrade() throws Exception {
         assertThat(call(filter, "GET", "/positions", READ).getStatus()).isEqualTo(200);
         assertThat(call(filter, "GET", "/orders/12", READ).getStatus()).isEqualTo(200);
+        assertThat(call(filter, "GET", "/options/chain", READ).getStatus()).isEqualTo(200);
         assertThat(call(filter, "POST", "/price", READ).getStatus()).isEqualTo(200);
 
         MockHttpServletResponse order = call(filter, "POST", "/order", READ);

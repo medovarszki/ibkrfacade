@@ -91,8 +91,9 @@ public class ContractController {
         return contractManagerService.getLastPriceByConid(contract.conid(), seconds(maxAge));
     }
 
-    @Operation(summary = "Returns the option chain for an underlying instrument. This method won't subscribe to the "
-            + "market data of the options.")
+    @Operation(summary = "Returns the expirations and strikes of the options of an underlying (reqSecDefOptParams), "
+            + "without conids and prices. This method won't subscribe to the market data of the options. For the "
+            + "options of a VIX future with conids and live quotes use GET /options/chain.")
     @GetMapping("/optionChain/{underlyingConid}")
     Collection<Option> getOptionChain(@Parameter(description = "The conid (IBKR unique id) of the underlying instrument") @PathVariable int underlyingConid) {
         return contractManagerService.getOptionChainByConid(underlyingConid);

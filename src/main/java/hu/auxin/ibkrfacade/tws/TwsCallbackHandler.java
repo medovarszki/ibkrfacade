@@ -95,6 +95,13 @@ public class TwsCallbackHandler extends DefaultEWrapper {
     }
 
     @Override
+    public void tickOptionComputation(int tickerId, int field, int tickAttrib, double impliedVol, double delta,
+                                      double optPrice, double pvDividend, double gamma, double vega, double theta,
+                                      double undPrice) {
+        marketDataService.onOptionComputation(tickerId, field, impliedVol, delta, gamma, vega, theta);
+    }
+
+    @Override
     public void marketDataType(int reqId, int marketDataType) {
         if (!marketDataService.onMarketDataType(reqId, marketDataType)) {
             comboMarketDataService.onMarketDataType(reqId, marketDataType);

@@ -12,6 +12,7 @@ Docker network, in front of a containerized IB Gateway (paper account by default
 
 - The TWS API exposed to a REST API ([OpenAPI spec](docs/openapi.yaml), Swagger UI at `/ibkr/swagger-ui/index.html`)
     - instrument search, contract details, option chain
+    - options of a VIX future with conids, live quotes and the IBKR model greeks
     - market data subscription and latest prices (with sizes, volume, open interest, previous close), historical
       OHLCV bars
     - futures chain, calendar spread quotes (from the legs and from the exchange listed spread)
@@ -123,6 +124,8 @@ Every property can be set through environment variables (Spring relaxed binding)
 | `IBKR_PRICE_STALE_AFTER` | `IBKR_ORDER_MAX_QUOTE_AGE` | `GET /price` reports `stale: true` if the latest bid/ask is older than this |
 | `IBKR_PRICE_QUOTE_WAIT` | `3s` | How long `GET /price` waits for the first quote of a not yet subscribed instrument |
 | `IBKR_SPREAD_MAX_SUBSCRIPTIONS` | `10` | Market data subscriptions kept for exchange listed spreads (`GET /spread`) |
+| `IBKR_OPTION_MAX_SUBSCRIPTIONS` | `60` | Option market data subscriptions kept by `GET /options/chain`, the least recently requested chain is cancelled first |
+| `IBKR_OPTION_CHAIN_CACHE_TTL` | `12h` | How long the option contracts of an expiration are cached by `GET /options/chain` |
 | `IBKR_ORDER_MAX_QUOTE_AGE` | `15m` | An order needs a bid/ask not older than this (`0` disables the age check) |
 | `IBKR_ORDER_QUOTE_WAIT` | `3s` | How long to wait for the first quote of a not yet subscribed instrument |
 | `IBKR_ORDER_IDEMPOTENCY_TTL` | `30d` | How long a `client_order_id` is kept in Redis |
@@ -155,7 +158,8 @@ with a machine readable `code`:
 | GET | `/futures/chain?symbol=VIX&exchange=CFE&trading_class=VX&include_expired=false` | Futures of an underlying ordered by expiration, see [Futures](#futures-and-calendar-spreads) |
 | GET | `/spread?near={conid}&far={conid}` | Calendar spread of two futures, see [Futures](#futures-and-calendar-spreads) |
 | GET | `/history/{conid}?duration=1 M&barSize=1 day&whatToShow=TRADES&useRth=true` | OHLCV bars, times in the exchange time zone |
-| GET | `/optionChain/{conid}` | Option chain of an underlying |
+| GET | `/options/chain?future_conid=&product=VIX&strike_range=0.25&max_strikes=15&rights=C,P` | Options expiring with a VIX future, with conids, quotes and model greeks, see [Options](#options-of-a-vix-future) |
+| GET | `/optionChain/{conid}` | Expirations and strikes of the options of an underlying (no conids, no prices) |
 | GET | `/account/summary?account=` | NAV, cash, available funds, buying power, margin requirements, currency, `timestamp` (query), `updated_at` (last update from TWS) |
 | GET | `/positions` | Positions with average cost, market price, market value, unrealized / realized P&L |
 | POST | `/order` | Place an order (**write token**) |
@@ -214,6 +218,45 @@ minus near (buying the spread = buying the far, selling the near leg):
   `IBKR_SPREAD_MAX_SUBSCRIPTIONS` (10) most recently requested spreads stay subscribed. The first request of a
   spread waits at most `IBKR_PRICE_QUOTE_WAIT` for its first quote.
 - 400 `INVALID_SPREAD` if the legs are not two different futures of the same underlying and exchange.
+
+### Options of a VIX future
+
+`GET /options/chain?future_conid={conid}` returns the options expiring together with a VX future, with their conids,
+live quotes and the values of the IBKR option model:
+
+```json
+{"future_conid": 866999753, "expiration": "20261215", "multiplier": 100, "trading_class": "VIX", "underlying_price": 22.3,
+ "options": [{"conid": 868724165, "strike": 22.0, "right": "C", "bid": 2.95, "ask": 3.05, "bid_size": 120, "ask_size": 80,
+              "last": 2.99, "quote_age_seconds": 1, "stale": false, "model_iv": 1.16, "model_delta": 0.514,
+              "model_gamma": 0.058, "model_vega": 0.024, "model_theta": -0.046, "stream_error": null}, "..."]}
+```
+
+- `product=VIX` (default): the monthly VIX index options (`OPT`, trading class `VIX`, the weeklies `VIXW` are
+  excluded). They settle to the same SOQ as the future, but IBKR reports the day before the expiration of the future
+  as their last trading day: `expiration` is `20261215` for VXZ6 (`20261216`). `product=VX_FOP`: options on the VX
+  future itself (`FOP` on CFE); IBKR has no such contracts at the moment, so this is 404 `FOP_NOT_AVAILABLE`.
+- Strikes: the `max_strikes` (15) strikes closest to the price of the future (`underlying_price`: mid, or last, or
+  previous close) between `F * (1 - strike_range)` and `F * (1 + strike_range)` (0.25), each with the requested
+  `rights` (`C,P`). The options are ordered by strike, the call first.
+- The contracts are resolved through TWS (`reqContractDetails`) and cached by expiration for
+  `IBKR_OPTION_CHAIN_CACHE_TTL` (12h).
+- Market data: every option is subscribed, the request waits at most `IBKR_PRICE_QUOTE_WAIT` (3s) altogether for
+  the first quotes. **Every option uses a market data line** of the account (100 by default, shared with the futures
+  and everything else): this endpoint keeps at most `IBKR_OPTION_MAX_SUBSCRIPTIONS` (60) options subscribed, e.g. two
+  expirations with 15 strikes, calls and puts. When a chain needs more lines, the option subscriptions of the least
+  recently requested chain are cancelled first, and the strikes which drop out of a chain are cancelled at once.
+  Options which were already subscribed by `GET /subscribe` or `GET /prices` are never cancelled here. A single
+  request needing more lines than the limit is 400 `OPTION_SUBSCRIPTION_LIMIT`.
+- `model_iv`, `model_delta`, `model_gamma`, `model_vega`, `model_theta` come from the IBKR option model
+  (`tickOptionComputation`). TWS sends them asynchronously: they can be null in the first response of a new
+  subscription, and outside of the trading hours they may take longer.
+- A missing market data permission doesn't fail the request: the option has `stream_error` (eg. `354: Requested
+  market data is not subscribed`) and `stale: true`. `stale` and `quote_age_seconds` work like in [Prices](#prices).
+- Errors: 404 `CONTRACT_NOT_FOUND` (unknown conid), 400 `INVALID_FUTURE` (not a VIX future), 404 `OPTIONS_NOT_FOUND`
+  (no options for the expiration), 422 `UNDERLYING_PRICE_UNAVAILABLE` (no price of the future at all).
+
+`GET /optionChain/{conid}` (`reqSecDefOptParams`) only lists the expirations and strikes of an underlying, without
+conids and prices.
 
 ### Trading session
 

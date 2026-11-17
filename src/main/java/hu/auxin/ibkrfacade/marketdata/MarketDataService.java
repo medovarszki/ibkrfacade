@@ -9,6 +9,7 @@ import hu.auxin.ibkrfacade.data.TimeSeriesHandler;
 import hu.auxin.ibkrfacade.tws.TwsConnectedEvent;
 import hu.auxin.ibkrfacade.tws.TwsConnection;
 import hu.auxin.ibkrfacade.tws.TwsDataLostEvent;
+import hu.auxin.ibkrfacade.tws.TwsNotConnectedException;
 import hu.auxin.ibkrfacade.tws.TwsRequestRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -95,6 +96,31 @@ public class MarketDataService {
         return tickerId;
     }
 
+    /**
+     * Cancels the market data subscription of the conid. The latest prices stay in Redis, the in-memory values
+     * (sizes, statistics, option model values) are dropped.
+     *
+     * @return false if the conid was not subscribed
+     */
+    public synchronized boolean unsubscribe(int conid) {
+        Integer tickerId = tickerByConid.remove(conid);
+        if (tickerId == null) {
+            return false;
+        }
+        Contract contract = contractsByTicker.remove(tickerId);
+        quotes.remove(conid);
+        streamErrors.remove(conid);
+        marketDataTypes.remove(conid);
+        try {
+            cancel(connection.client(), tickerId);
+        } catch (TwsNotConnectedException e) {
+            // nothing to cancel, and the subscription is not restored at the next connection
+        }
+        log.info("Cancelled the market data of {} (conid={}, tickerId={})",
+                contract == null ? "?" : contract.symbol(), conid, tickerId);
+        return true;
+    }
+
     public boolean isSubscribed(int conid) {
         return tickerByConid.containsKey(conid);
     }
@@ -107,6 +133,14 @@ public class MarketDataService {
         return MarketPrice.of(conid, value(bid), value(ask), value(last), time(bid), time(ask), time(last),
                 isSubscribed(conid), streamErrors.get(conid), marketDataTypes.get(conid), Instant.now(), staleAfter,
                 quoteBasis(conid), quote == null ? MarketStats.EMPTY : quote.stats());
+    }
+
+    /**
+     * Latest option model values (implied volatility and greeks) computed by IBKR, EMPTY if unknown.
+     */
+    public OptionGreeks modelGreeks(int conid) {
+        LiveQuote quote = quotes.get(conid);
+        return quote == null ? OptionGreeks.EMPTY : quote.modelGreeks();
     }
 
     /**
@@ -187,6 +221,26 @@ public class MarketDataService {
         return true;
     }
 
+    /**
+     * Option computations: only the model values are kept (not the ones computed from the bid, ask or last).
+     *
+     * @return false if the ticker id does not belong to a market data subscription
+     */
+    public boolean onOptionComputation(int tickerId, int field, double impliedVol, double delta, double gamma,
+                                       double vega, double theta) {
+        Contract contract = contractsByTicker.get(tickerId);
+        if (contract == null) {
+            return false;
+        }
+        TickType tickType = TickType.get(field);
+        log.debug("Option computation {} of conid {}: iv={} delta={} gamma={} vega={} theta={}", tickType,
+                contract.conid(), impliedVol, delta, gamma, vega, theta);
+        if (tickType == TickType.MODEL_OPTION || tickType == TickType.DELAYED_MODEL_OPTION) {
+            quote(contract.conid()).modelGreeks(OptionGreeks.of(impliedVol, delta, gamma, vega, theta));
+        }
+        return true;
+    }
+
     private LiveQuote quote(int conid) {
         return quotes.computeIfAbsent(conid, key -> new LiveQuote());
     }
@@ -246,7 +300,8 @@ public class MarketDataService {
     }
 
     /**
-     * The open interest of futures is not part of the default tick set.
+     * The open interest of futures is not part of the default tick set. The option computations (implied
+     * volatility and greeks, tickOptionComputation) are part of the default tick set of options (OPT, FOP).
      */
     static String genericTicks(Contract contract) {
         return contract.secType() == Types.SecType.FUT ? FUTURES_OPEN_INTEREST_TICK : "";
