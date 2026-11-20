@@ -12,6 +12,9 @@ info:
     name: Mihaly Medovarszki
     url: https://github.com/medovarszki/ibkrfacade
     email: mihaly@medovarszki.hu
+  license:
+    name: GPL-3.0-or-later
+    identifier: GPL-3.0-or-later
   version: "1.0"
 servers:
 - url: /ibkr

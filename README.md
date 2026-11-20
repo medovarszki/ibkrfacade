@@ -355,7 +355,18 @@ orders through the same safety checks as the REST API. The samples are not loade
 
 **Important: This is not a real strategy. Don't even think about using it in real conditions!**
 
-## License note
+## License
 
-The TWS API is released by Interactive Brokers under the GNU GPL v3 from version 10.49
-(see [lib/README.md](lib/README.md)).
+Copyright (C) 2022-2026 Mihaly Medovarszki
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version. See [LICENSE](LICENSE).
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. This also applies to trading: use it at your own
+risk, any order it places is your responsibility.
+
+The bundled TWS API is released by Interactive Brokers under the GNU GPL v3 from version 10.49
+(see [lib/README.md](lib/README.md)). Distributing the application (eg. the Docker image or the packaged jar) means
+distributing a combined work under the GPL v3, together with its complete corresponding source code.

@@ -14,6 +14,8 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B package \
 
 # --- runtime: JRE only, non-root user
 FROM eclipse-temurin:25.0.4.1_1-jre
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/medovarszki/ibkrfacade"
 RUN command -v curl >/dev/null 2>&1 || (apt-get update \
         && apt-get install -y --no-install-recommends curl \
         && rm -rf /var/lib/apt/lists/*) \
@@ -24,6 +26,7 @@ COPY --from=build /build/extracted/dependencies/ ./
 COPY --from=build /build/extracted/spring-boot-loader/ ./
 COPY --from=build /build/extracted/snapshot-dependencies/ ./
 COPY --from=build /build/extracted/application/ ./
+COPY LICENSE /app/licenses/LICENSE
 COPY lib/TWS-API-LICENSE.txt /app/licenses/TWS-API-LICENSE.txt
 USER 10001:10001
 

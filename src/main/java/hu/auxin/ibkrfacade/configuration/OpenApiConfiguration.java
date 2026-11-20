@@ -4,6 +4,7 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
@@ -35,7 +36,10 @@ public class OpenApiConfiguration {
                         .contact(new Contact()
                                 .name("Mihaly Medovarszki")
                                 .email("mihaly@medovarszki.hu")
-                                .url("https://github.com/medovarszki/ibkrfacade")))
+                                .url("https://github.com/medovarszki/ibkrfacade"))
+                        .license(new License()
+                                .name("GPL-3.0-or-later")
+                                .identifier("GPL-3.0-or-later")))
                 .components(new Components().addSecuritySchemes(BEARER, new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")

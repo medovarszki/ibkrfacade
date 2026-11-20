@@ -15,6 +15,13 @@
     <name>IBKR Facade</name>
     <description>Interactive Brokers API wrapper and trading toolbox</description>
     <inceptionYear>2022</inceptionYear>
+    <licenses>
+        <license>
+            <name>GPL-3.0-or-later</name>
+            <url>https://www.gnu.org/licenses/gpl-3.0.html</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
     <developers>
         <developer>
             <name>Mihaly Medovarszki</name>
